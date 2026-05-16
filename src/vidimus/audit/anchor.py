@@ -42,7 +42,7 @@ import hashlib
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from vidimus.audit.canonical import canonicalize
 from vidimus.audit.schemas import Attestation
@@ -81,11 +81,11 @@ VIDIMUS_ANCHOR_ABI = [
 
 # Default RPC endpoints for common chains. Users can override.
 DEFAULT_RPC_URLS = {
-    "bsc-mainnet":     "https://bsc-dataseed.binance.org/",
-    "bsc-testnet":     "https://data-seed-prebsc-1-s1.binance.org:8545/",
-    "ethereum":        "https://eth.llamarpc.com",
+    "bsc-mainnet": "https://bsc-dataseed.binance.org/",
+    "bsc-testnet": "https://data-seed-prebsc-1-s1.binance.org:8545/",
+    "ethereum": "https://eth.llamarpc.com",
     "ethereum-sepolia": "https://rpc.sepolia.org",
-    "base":            "https://mainnet.base.org",
+    "base": "https://mainnet.base.org",
 }
 
 
@@ -168,14 +168,13 @@ class OnchainAnchorer:
         """Anchor an attestation on-chain. Returns the transaction hash."""
         if not self._private_key or not self._account_address:
             raise RuntimeError(
-                "anchor() requires a private_key in the constructor; "
-                "this instance is read-only"
+                "anchor() requires a private_key in the constructor; this instance is read-only"
             )
 
         workspace_id = workspace_to_bytes32(attestation.workspace)
         anchor_hash = compute_anchor_hash(attestation)
 
-        nonce = self._w3.eth.get_transaction_count(self._account_address)
+        nonce = self._w3.eth.get_transaction_count(cast(Any, self._account_address))
         tx = self._contract.functions.anchor(workspace_id, anchor_hash).build_transaction(
             {
                 "from": self._account_address,
@@ -188,9 +187,13 @@ class OnchainAnchorer:
         signed = self._w3.eth.account.sign_transaction(tx, self._private_key)
         # web3.py 6.x uses .rawTransaction, 7.x uses .raw_transaction
         raw = getattr(signed, "raw_transaction", None) or getattr(signed, "rawTransaction", None)
-        tx_hash = self._w3.eth.send_raw_transaction(raw)
-        logger.info("Anchored attestation %s on chain %d (tx=%s)",
-                    attestation.workspace, self._chain_id, tx_hash.hex())
+        tx_hash = self._w3.eth.send_raw_transaction(cast(Any, raw))
+        logger.info(
+            "Anchored attestation %s on chain %d (tx=%s)",
+            attestation.workspace,
+            self._chain_id,
+            tx_hash.hex(),
+        )
         return tx_hash.hex()
 
     def verify_anchor(

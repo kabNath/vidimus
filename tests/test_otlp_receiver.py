@@ -17,7 +17,6 @@ from vidimus.receivers.otlp import (
 )
 from vidimus.storage.memory import InMemoryStore
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Attribute conversion
 # ─────────────────────────────────────────────────────────────────────────────
@@ -70,7 +69,9 @@ class TestStatusConversion:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _make_otlp_span(span_id: str = "abc123", parent: str | None = None, name: str = "test_span") -> dict:
+def _make_otlp_span(
+    span_id: str = "abc123", parent: str | None = None, name: str = "test_span"
+) -> dict:
     return {
         "traceId": "trace-001",
         "spanId": span_id,
@@ -115,13 +116,17 @@ class TestSpanConversion:
 class TestRequestConversion:
     def test_single_trace(self):
         payload = {
-            "resourceSpans": [{
-                "resource": {"attributes": []},
-                "scopeSpans": [{
-                    "scope": {},
-                    "spans": [_make_otlp_span()],
-                }],
-            }],
+            "resourceSpans": [
+                {
+                    "resource": {"attributes": []},
+                    "scopeSpans": [
+                        {
+                            "scope": {},
+                            "spans": [_make_otlp_span()],
+                        }
+                    ],
+                }
+            ],
         }
         traces = otlp_request_to_vidimus_traces(payload, workspace="ws")
         assert len(traces) == 1
@@ -131,16 +136,20 @@ class TestRequestConversion:
 
     def test_multiple_spans_same_trace(self):
         payload = {
-            "resourceSpans": [{
-                "resource": {"attributes": []},
-                "scopeSpans": [{
-                    "scope": {},
-                    "spans": [
-                        _make_otlp_span(span_id="a", name="root"),
-                        _make_otlp_span(span_id="b", parent="a", name="child"),
+            "resourceSpans": [
+                {
+                    "resource": {"attributes": []},
+                    "scopeSpans": [
+                        {
+                            "scope": {},
+                            "spans": [
+                                _make_otlp_span(span_id="a", name="root"),
+                                _make_otlp_span(span_id="b", parent="a", name="child"),
+                            ],
+                        }
                     ],
-                }],
-            }],
+                }
+            ],
         }
         traces = otlp_request_to_vidimus_traces(payload, workspace="ws")
         assert len(traces) == 1  # Both spans go in the same Vidimus trace
@@ -174,12 +183,16 @@ class TestHttpReceiver:
     def test_receive_single_trace(self, receiver_and_client):
         _, client, store = receiver_and_client
         payload = {
-            "resourceSpans": [{
-                "resource": {"attributes": []},
-                "scopeSpans": [{
-                    "spans": [_make_otlp_span()],
-                }],
-            }],
+            "resourceSpans": [
+                {
+                    "resource": {"attributes": []},
+                    "scopeSpans": [
+                        {
+                            "spans": [_make_otlp_span()],
+                        }
+                    ],
+                }
+            ],
         }
         r = client.post("/v1/traces", json=payload)
         assert r.status_code == 200
@@ -190,22 +203,25 @@ class TestHttpReceiver:
         _, client, store = receiver_and_client
         # Build a payload with three distinct trace_ids
         payload = {
-            "resourceSpans": [{
-                "resource": {"attributes": []},
-                "scopeSpans": [{
-                    "spans": [
-                        {**_make_otlp_span(), "traceId": f"trace-{i}"}
-                        for i in range(3)
+            "resourceSpans": [
+                {
+                    "resource": {"attributes": []},
+                    "scopeSpans": [
+                        {
+                            "spans": [
+                                {**_make_otlp_span(), "traceId": f"trace-{i}"} for i in range(3)
+                            ],
+                        }
                     ],
-                }],
-            }],
+                }
+            ],
         }
         r = client.post("/v1/traces", json=payload)
         assert r.json()["stored"] == 3
         assert store.count("test-ws") == 3
 
     def test_receive_empty(self, receiver_and_client):
-        _, client, store = receiver_and_client
+        _, client, _store = receiver_and_client
         r = client.post("/v1/traces", json={"resourceSpans": []})
         assert r.status_code == 200
         assert r.json()["stored"] == 0

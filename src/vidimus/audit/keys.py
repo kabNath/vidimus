@@ -80,8 +80,10 @@ def save_keypair(keypair: KeyPair, keys_dir: Path) -> tuple[Path, Path]:
         (private_pem_path, public_pem_path).
     """
     keys_dir.mkdir(parents=True, exist_ok=True)
-    # Enforce 0700 on the directory.
-    os.chmod(keys_dir, 0o700)
+    # Enforce 0700 on the directory (POSIX only — Windows ACLs are handled
+    # at the filesystem level and ignore POSIX bits).
+    if os.name != "nt":
+        os.chmod(keys_dir, 0o700)
 
     priv_path = keys_dir / f"{keypair.fingerprint}.priv.pem"
     pub_path = keys_dir / f"{keypair.fingerprint}.pub.pem"
@@ -96,15 +98,21 @@ def save_keypair(keypair: KeyPair, keys_dir: Path) -> tuple[Path, Path]:
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
 
-    # Write private with 0600 immediately.
-    fd = os.open(str(priv_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    try:
-        os.write(fd, priv_pem)
-    finally:
-        os.close(fd)
+    # Write private key. On POSIX, restrict to 0600 atomically via O_CREAT mode.
+    # On Windows, fall back to a regular write — Windows permissions must be
+    # managed via ACLs at the filesystem level, which is out of scope here.
+    if os.name == "nt":
+        priv_path.write_bytes(priv_pem)
+    else:
+        fd = os.open(str(priv_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.write(fd, priv_pem)
+        finally:
+            os.close(fd)
 
     pub_path.write_bytes(pub_pem)
-    os.chmod(pub_path, 0o644)
+    if os.name != "nt":
+        os.chmod(pub_path, 0o644)
 
     return priv_path, pub_path
 

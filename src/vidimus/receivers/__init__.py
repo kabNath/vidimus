@@ -13,6 +13,7 @@ Requires the optional dependency: ``pip install vidimus[otel]``.
 
 try:
     from vidimus.receivers.otlp import OTLPHttpReceiver  # noqa: F401
+
     _has_otel = True
 except ImportError:
     _has_otel = False

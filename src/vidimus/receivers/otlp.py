@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from vidimus.audit.schemas import Span, Trace
 
@@ -71,7 +71,8 @@ def _otel_status_to_vidimus(status_obj: dict[str, Any] | None) -> str:
     if not status_obj:
         return "unset"
     code = status_obj.get("code", 0)
-    return {0: "unset", 1: "ok", 2: "error"}.get(code, "unset")
+    mapping: dict[int, str] = {0: "unset", 1: "ok", 2: "error"}
+    return mapping.get(code, "unset")
 
 
 def _ns_to_int(value: Any) -> int:
@@ -92,6 +93,12 @@ def otlp_span_to_vidimus_span(otel_span: dict[str, Any]) -> Span:
         else:
             clean_attrs[k] = str(v)
 
+    status_str = _otel_status_to_vidimus(otel_span.get("status"))
+    # Narrow to the Literal type expected by Span
+    status: Literal["ok", "error", "unset"] = (
+        "ok" if status_str == "ok" else "error" if status_str == "error" else "unset"
+    )
+
     return Span(
         span_id=otel_span.get("spanId", ""),
         parent_span_id=otel_span.get("parentSpanId") or None,
@@ -99,13 +106,11 @@ def otlp_span_to_vidimus_span(otel_span: dict[str, Any]) -> Span:
         start_ns=_ns_to_int(otel_span.get("startTimeUnixNano")),
         end_ns=_ns_to_int(otel_span.get("endTimeUnixNano")),
         attributes=clean_attrs,
-        status=_otel_status_to_vidimus(otel_span.get("status")),
+        status=status,
     )
 
 
-def otlp_request_to_vidimus_traces(
-    payload: dict[str, Any], workspace: str
-) -> list[Trace]:
+def otlp_request_to_vidimus_traces(payload: dict[str, Any], workspace: str) -> list[Trace]:
     """Convert a complete OTLP/HTTP trace request into Vidimus Traces.
 
     OTLP groups spans by trace_id implicitly (multiple spans share a trace_id).
@@ -132,10 +137,15 @@ def otlp_request_to_vidimus_traces(
         # input/output, falling back to the first span if there is no clear root.
         root = next((s for s in spans if s.parent_span_id is None), spans[0])
         input_value = root.attributes.get("gen_ai.prompt") or root.attributes.get("input") or ""
-        output_value = root.attributes.get("gen_ai.completion") or root.attributes.get("output") or ""
+        output_value = (
+            root.attributes.get("gen_ai.completion") or root.attributes.get("output") or ""
+        )
         model = root.attributes.get("gen_ai.model_name") or root.attributes.get("model")
-        captured_at = datetime.fromtimestamp(root.start_ns / 1_000_000_000, tz=timezone.utc) \
-            if root.start_ns else datetime.now(timezone.utc)
+        captured_at = (
+            datetime.fromtimestamp(root.start_ns / 1_000_000_000, tz=timezone.utc)
+            if root.start_ns
+            else datetime.now(timezone.utc)
+        )
 
         traces.append(
             Trace(
@@ -194,6 +204,7 @@ class OTLPHttpReceiver:
 
         if store is None:
             from vidimus.config import get_config
+
             store = get_config().store
         self._store = store
 
@@ -213,7 +224,7 @@ class OTLPHttpReceiver:
             }
 
         @self.app.post("/v1/traces")
-        async def receive_traces(payload: dict = Body(...)) -> dict[str, Any]:
+        async def receive_traces(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:  # noqa: B008
             traces = otlp_request_to_vidimus_traces(payload, workspace=self._workspace)
             for t in traces:
                 self._store.add_trace(t)
@@ -226,12 +237,13 @@ class OTLPHttpReceiver:
             import uvicorn
         except ImportError as exc:
             raise ImportError(
-                "Running the receiver requires 'uvicorn'. "
-                "Install with: pip install vidimus[otel]"
+                "Running the receiver requires 'uvicorn'. Install with: pip install vidimus[otel]"
             ) from exc
 
         logger.info(
             "Starting Vidimus OTLP receiver on http://%s:%d (workspace=%s)",
-            self._host, self._port, self._workspace,
+            self._host,
+            self._port,
+            self._workspace,
         )
         uvicorn.run(self.app, host=self._host, port=self._port, log_level="info")

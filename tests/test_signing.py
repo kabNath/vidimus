@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -37,6 +38,7 @@ class TestKeypair:
             loaded = load_keypair(priv_path)
             assert loaded.fingerprint == kp.fingerprint
 
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX permissions not applicable on Windows")
     def test_private_key_has_restrictive_perms(self) -> None:
         kp = generate_keypair()
         with tempfile.TemporaryDirectory() as tmp:

@@ -77,7 +77,19 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM", "RUF"]
-ignore = ["E501"]  # handled by formatter
+ignore = [
+    "E501",   # handled by formatter
+    "RUF001", # ambiguous unicode chars in strings (we use Greek letters intentionally: α, β, κ)
+    "RUF002", # ambiguous unicode chars in docstrings (same)
+    "RUF003", # ambiguous unicode chars in comments (same)
+    "SIM117", # nested `with` is sometimes clearer than the combined form
+    "SIM108", # not every if/else benefits from being a ternary
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests use pytest.importorskip() which requires conditional imports after a function call.
+# Tests also use MagicMock variables named after the class they mock (Pythonic Mock convention).
+"tests/*.py" = ["E402", "N806", "N802"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -26,7 +26,8 @@ from vidimus.audit.attest import attest as do_attest
 from vidimus.audit.attest import verify as do_verify
 from vidimus.audit.keys import generate_keypair, load_keypair, save_keypair
 from vidimus.audit.schemas import Attestation
-from vidimus.config import get_config, init as init_config
+from vidimus.config import get_config
+from vidimus.config import init as init_config
 
 console = Console()
 
@@ -50,9 +51,7 @@ def init(workspace: str) -> None:
     if not existing:
         kp = generate_keypair()
         priv, pub = save_keypair(kp, keys_dir)
-        console.print(
-            f"[green]✓[/green] Initialized workspace '[bold]{workspace}[/bold]'"
-        )
+        console.print(f"[green]✓[/green] Initialized workspace '[bold]{workspace}[/bold]'")
         console.print(f"  home dir : {config.home_dir}")
         console.print(f"  key      : {kp.fingerprint[:16]}…")
         console.print(f"  private  : {priv} (0600)")
@@ -195,9 +194,7 @@ def attest(
     console.print(f"  Merkle root  : {attestation.merkle_root[:32]}…")
     console.print(f"  issuer fp    : {attestation.issuer_pubkey_fingerprint[:32]}…")
     for m in attestation.metrics:
-        agreement = (
-            f"κ={m.judge_agreement:.2f}" if m.judge_agreement is not None else "n/a"
-        )
+        agreement = f"κ={m.judge_agreement:.2f}" if m.judge_agreement is not None else "n/a"
         console.print(
             f"  {m.name:24} {m.point_estimate:6.2%} "
             f"[CI {m.ci_low:.2%} – {m.ci_high:.2%}] "
@@ -235,9 +232,7 @@ def verify(file: Path) -> None:
     console.print(f"  Merkle root  : {attestation.merkle_root}")
     console.print(f"  signed by    : {attestation.issuer_pubkey_fingerprint}")
     for m in attestation.metrics:
-        agreement = (
-            f"κ={m.judge_agreement:.2f}" if m.judge_agreement is not None else "n/a"
-        )
+        agreement = f"κ={m.judge_agreement:.2f}" if m.judge_agreement is not None else "n/a"
         console.print(
             f"  {m.name:24} {m.point_estimate:6.2%} "
             f"[CI {m.ci_low:.2%} – {m.ci_high:.2%}] "
@@ -247,8 +242,13 @@ def verify(file: Path) -> None:
 
 @cli.command()
 @click.argument("trace_id")
-@click.option("--against", "attestation_path", required=True, type=click.Path(exists=True),
-              help="Path to the attestation JSON to prove inclusion against.")
+@click.option(
+    "--against",
+    "attestation_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="Path to the attestation JSON to prove inclusion against.",
+)
 def prove(trace_id: str, attestation_path: str) -> None:
     """Generate an inclusion proof for a specific trace.
 
@@ -277,11 +277,14 @@ def prove(trace_id: str, attestation_path: str) -> None:
 
     target_index = next((i for i, t in enumerate(traces) if t.trace_id == trace_id), None)
     if target_index is None:
-        console.print(f"[red]✗ trace {trace_id!r} not found in store for this attestation window[/red]")
+        console.print(
+            f"[red]✗ trace {trace_id!r} not found in store for this attestation window[/red]"
+        )
         sys.exit(1)
 
     # Rebuild Merkle tree to extract proof
     import hashlib
+
     from vidimus.audit.canonical import canonicalize
 
     leaves = [hashlib.sha256(canonicalize(t.model_dump(mode="json"))).digest() for t in traces]
@@ -292,7 +295,9 @@ def prove(trace_id: str, attestation_path: str) -> None:
         console.print(
             f"[red]✗ local Merkle root {tree.root.hex()[:32]}... does not match attestation root {att.merkle_root[:32]}...[/red]"
         )
-        console.print("  This usually means the trace store has been modified since the attestation was generated.")
+        console.print(
+            "  This usually means the trace store has been modified since the attestation was generated."
+        )
         sys.exit(2)
 
     console.print("\n[bold green]✓ Inclusion proof:[/bold green]")
@@ -326,11 +331,11 @@ def serve(workspace: str | None, host: str, port: int) -> None:
     config = get_config()
     ws = workspace or config.workspace
 
-    console.print(f"[bold]Starting Vidimus OTLP receiver[/bold]")
+    console.print("[bold]Starting Vidimus OTLP receiver[/bold]")
     console.print(f"  workspace : {ws}")
     console.print(f"  address   : http://{host}:{port}")
-    console.print(f"  endpoint  : POST /v1/traces")
-    console.print(f"  health    : GET  /health")
+    console.print("  endpoint  : POST /v1/traces")
+    console.print("  health    : GET  /health")
     console.print()
 
     receiver = OTLPHttpReceiver(workspace=ws, host=host, port=port)

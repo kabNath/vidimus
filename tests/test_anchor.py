@@ -5,14 +5,13 @@ These tests mock web3.py so they run without a live RPC endpoint.
 
 from __future__ import annotations
 
-import hashlib
 import sys
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from vidimus.audit.schemas import Attestation, OnchainAnchor
+from vidimus.audit.schemas import Attestation
 
 
 def _make_attestation() -> Attestation:
@@ -41,6 +40,7 @@ def _make_attestation() -> Attestation:
 class TestPureFunctions:
     def test_workspace_to_bytes32_deterministic(self):
         from vidimus.audit.anchor import workspace_to_bytes32
+
         a = workspace_to_bytes32("acme-prod")
         b = workspace_to_bytes32("acme-prod")
         assert a == b
@@ -48,10 +48,12 @@ class TestPureFunctions:
 
     def test_workspace_to_bytes32_different_inputs(self):
         from vidimus.audit.anchor import workspace_to_bytes32
+
         assert workspace_to_bytes32("ws-a") != workspace_to_bytes32("ws-b")
 
     def test_compute_anchor_hash_deterministic(self):
         from vidimus.audit.anchor import compute_anchor_hash
+
         att = _make_attestation()
         h1 = compute_anchor_hash(att)
         h2 = compute_anchor_hash(att)
@@ -63,6 +65,7 @@ class TestPureFunctions:
         the same anchor hash, because we want the anchor to be stable
         independent of the signature field."""
         from vidimus.audit.anchor import compute_anchor_hash
+
         att1 = _make_attestation()
         att2 = att1.model_copy(update={"signature": "00" * 32})
         assert compute_anchor_hash(att1) == compute_anchor_hash(att2)
@@ -92,7 +95,9 @@ def mock_web3():
         w3_instance.eth.send_raw_transaction.return_value = b"\xaa" * 32
         contract = MagicMock()
         contract.functions.anchor.return_value.build_transaction.return_value = {
-            "to": "0xanchor", "value": 0, "data": "0x",
+            "to": "0xanchor",
+            "value": 0,
+            "data": "0x",
         }
         w3_instance.eth.contract.return_value = contract
         w3_instance.eth.account.from_key.return_value.address = "0xDeadBeef"
@@ -112,6 +117,7 @@ class TestAnchorer:
         # Hide web3 module entirely
         with patch.dict("sys.modules", {"web3": None}):
             from vidimus.audit.anchor import OnchainAnchorer
+
             with pytest.raises(ImportError, match="vidimus\\[onchain\\]"):
                 OnchainAnchorer(
                     rpc_url="https://example.com",
@@ -120,7 +126,8 @@ class TestAnchorer:
 
     def test_anchor_returns_tx_hash(self, mock_web3):
         from vidimus.audit.anchor import OnchainAnchorer
-        w3_instance, contract = mock_web3
+
+        _w3_instance, contract = mock_web3
         anchorer = OnchainAnchorer(
             rpc_url="https://example.com",
             contract_address="0x0000000000000000000000000000000000000000",
@@ -133,6 +140,7 @@ class TestAnchorer:
 
     def test_anchor_without_private_key_raises(self, mock_web3):
         from vidimus.audit.anchor import OnchainAnchorer
+
         anchorer = OnchainAnchorer(
             rpc_url="https://example.com",
             contract_address="0x0000000000000000000000000000000000000000",
@@ -143,7 +151,8 @@ class TestAnchorer:
 
     def test_verify_anchor_found(self, mock_web3):
         from vidimus.audit.anchor import OnchainAnchorer, compute_anchor_hash, workspace_to_bytes32
-        w3_instance, contract = mock_web3
+
+        _w3_instance, contract = mock_web3
 
         att = _make_attestation()
         expected_hash = compute_anchor_hash(att)
@@ -174,7 +183,8 @@ class TestAnchorer:
 
     def test_verify_anchor_not_found(self, mock_web3):
         from vidimus.audit.anchor import OnchainAnchorer
-        w3_instance, contract = mock_web3
+
+        _w3_instance, contract = mock_web3
 
         event_filter = MagicMock()
         event_filter.get_all_entries.return_value = []

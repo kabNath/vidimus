@@ -21,8 +21,8 @@ low-confidence regardless of how tight the bootstrap CI looks.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 import numpy as np
 

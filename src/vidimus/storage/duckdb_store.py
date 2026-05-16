@@ -248,9 +248,9 @@ class DuckDBStore:
         with self._lock:
             if self._conn is not None:
                 self._conn.close()
-                self._conn = None  # type: ignore[assignment]
+                self._conn = None
 
-    def __enter__(self) -> "DuckDBStore":
+    def __enter__(self) -> DuckDBStore:
         return self
 
     def __exit__(self, *exc_info: Any) -> None:

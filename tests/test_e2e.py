@@ -62,7 +62,7 @@ class TestEndToEnd:
             assert m.ci_low <= m.point_estimate <= m.ci_high
             assert len(m.judges) == 3
 
-        ok, issues, warnings = verify(att)
+        ok, issues, _warnings = verify(att)
         assert ok, f"verification failed: {issues}"
 
     def test_round_trip_through_json(self) -> None:
@@ -86,7 +86,7 @@ class TestEndToEnd:
             data = json.loads(path.read_text())
             loaded = Attestation.model_validate(data)
 
-            ok, issues, warnings = verify(loaded)
+            ok, issues, _warnings = verify(loaded)
             assert ok, f"verification failed: {issues}"
 
     def test_tampered_attestation_rejected(self) -> None:

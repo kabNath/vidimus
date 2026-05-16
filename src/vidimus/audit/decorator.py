@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import functools
 import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Any, Callable, Iterator, TypeVar
+from typing import Any, TypeVar
 
 from vidimus.audit.schemas import Span, Trace
 from vidimus.config import get_config

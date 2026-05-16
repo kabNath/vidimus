@@ -10,8 +10,8 @@ is recommended for higher-assurance verification).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Sequence
 
 from vidimus.audit.canonical import canonicalize
 from vidimus.audit.judges import Judge, build_judges
@@ -20,7 +20,6 @@ from vidimus.audit.merkle import MerkleTree
 from vidimus.audit.schemas import (
     Attestation,
     CalibratedMetric,
-    Trace,
 )
 from vidimus.audit.signing import sign_hex, verify_hex
 from vidimus.audit.uncertainty import (
@@ -92,9 +91,9 @@ def attest(
     if judges is None:
         judge_instances = build_judges(config.judges)
     elif isinstance(judges[0], str):
-        judge_instances = build_judges(judges)  # type: ignore[arg-type]
+        judge_instances = build_judges(judges)
     else:
-        judge_instances = list(judges)  # type: ignore[arg-type]
+        judge_instances = list(judges)
 
     # Step 4–5: evaluate metrics with multi-judge agreement.
     calibrated: list[CalibratedMetric] = []

@@ -215,12 +215,15 @@ class OpenAIJudge(Judge):
                 )
                 raw = resp.choices[0].message.content or ""
                 return _parse_judge_response(raw, metric)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 last_exc = exc
                 wait = 2**attempt
                 logger.warning(
                     "OpenAIJudge attempt %d/%d failed: %s; retrying in %ds",
-                    attempt + 1, self._max_retries, exc, wait,
+                    attempt + 1,
+                    self._max_retries,
+                    exc,
+                    wait,
                 )
                 time.sleep(wait)
 
@@ -279,12 +282,15 @@ class AnthropicJudge(Judge):
                     if hasattr(block, "text"):
                         raw += block.text
                 return _parse_judge_response(raw, metric)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 last_exc = exc
                 wait = 2**attempt
                 logger.warning(
                     "AnthropicJudge attempt %d/%d failed: %s; retrying in %ds",
-                    attempt + 1, self._max_retries, exc, wait,
+                    attempt + 1,
+                    self._max_retries,
+                    exc,
+                    wait,
                 )
                 time.sleep(wait)
 
@@ -316,8 +322,7 @@ class OllamaJudge(Judge):
             import requests
         except ImportError as exc:
             raise ImportError(
-                "OllamaJudge requires the 'requests' package. "
-                "Install with: pip install requests"
+                "OllamaJudge requires the 'requests' package. Install with: pip install requests"
             ) from exc
 
         self.name = f"ollama:{model}"
@@ -354,12 +359,15 @@ class OllamaJudge(Judge):
                 data = r.json()
                 raw = data.get("message", {}).get("content", "")
                 return _parse_judge_response(raw, metric)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 last_exc = exc
                 wait = 2**attempt
                 logger.warning(
                     "OllamaJudge attempt %d/%d failed: %s; retrying in %ds",
-                    attempt + 1, self._max_retries, exc, wait,
+                    attempt + 1,
+                    self._max_retries,
+                    exc,
+                    wait,
                 )
                 time.sleep(wait)
 

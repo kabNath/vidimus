@@ -61,7 +61,7 @@ class TestStrings:
 
     def test_unicode_passthrough(self) -> None:
         # Per RFC 8785, non-control non-special chars pass through.
-        assert canonicalize("café") == "\"café\"".encode("utf-8")
+        assert canonicalize("café") == '"café"'.encode()
 
 
 class TestArrays:

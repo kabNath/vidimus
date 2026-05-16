@@ -11,6 +11,7 @@ from vidimus.storage.memory import InMemoryStore
 
 try:
     from vidimus.storage.duckdb_store import DuckDBStore  # noqa: F401
+
     _has_duckdb = True
 except ImportError:
     _has_duckdb = False
