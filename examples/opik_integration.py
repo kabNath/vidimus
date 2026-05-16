@@ -1,142 +1,171 @@
-"""
-Vidimus + Opik integration example.
+"""Vidimus alongside Comet Opik.
 
-This example demonstrates the canonical Vidimus pattern: running on top of an
-existing Opik observability setup to add cryptographic provenance and calibrated
-uncertainty without replacing anything.
+This example demonstrates the **complementary** pattern: an agent is
+instrumented by both Opik (for the dashboard, datasets, prompt playground)
+*and* Vidimus (for the cryptographic attestation layer that Opik doesn't
+provide).
 
-The architecture is:
+Both tools coexist via OpenTelemetry, so the trace flows out to Opik in one
+direction and into Vidimus in another. Neither tool replaces the other:
 
-    Your agent ──▶ Opik (dashboards, traces, replay)
-                │
-                └──▶ Vidimus (Merkle tree, signed attestations)
+  Opik         provides: UI, dashboards, datasets, prompt versioning,
+                          generic LLMOps platform features
+  Vidimus      provides: tamper-evident traces, calibrated uncertainty,
+                          Ed25519 attestations, offline third-party verification
 
-Both consume the same OpenTelemetry spans. Opik handles the operational
-observability story; Vidimus handles the audit / trust story.
+This file shows the integration pattern with concrete code, gracefully
+falling back to a clear message if Opik is not installed.
 
-NOTE: This example uses stub Opik calls so it runs without an Opik account.
-In production you would `pip install opik` and configure it as usual.
+Setup:
+    pip install vidimus opik
 
-Requirements:
-    pip install vidimus
-    # pip install opik   # uncomment for real Opik integration
+    # Configure Opik (one of):
+    #   - Cloud:     opik configure --api-key <your-key>
+    #   - Self-host: opik configure --use-local
+
+Run:
+    python examples/opik_integration.py
 """
 
 from __future__ import annotations
 
-import time
-from typing import Any
+import os
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import vidimus
-
-# ---------------------------------------------------------------------------
-# Stub Opik client — replace with the real `import opik` in production.
-# ---------------------------------------------------------------------------
-class _StubOpikClient:
-    """Minimal stand-in for opik.Opik() so this example runs offline."""
-
-    def trace(self, name: str, input: Any, output: Any, metadata: dict[str, Any]) -> None:
-        # In real Opik this sends to the dashboard. We just print.
-        print(f"  [opik] traced: name={name!r} model={metadata.get('model')}")
+from vidimus.audit import attest, verify
+from vidimus.audit.keys import generate_keypair
 
 
-opik_client = _StubOpikClient()
+# ─────────────────────────────────────────────────────────────────────────────
+# Detect Opik availability
+# ─────────────────────────────────────────────────────────────────────────────
 
 
-# ---------------------------------------------------------------------------
-# The agent — instrumented for BOTH Opik and Vidimus.
-# ---------------------------------------------------------------------------
-vidimus.init(workspace="opik-integration-demo")
+def _opik_available() -> bool:
+    try:
+        import opik  # noqa: F401
+        return True
+    except ImportError:
+        return False
 
 
-@vidimus.audit
-def rag_agent(question: str) -> str:
-    """Answer a question using a (faked) RAG pipeline.
+# ─────────────────────────────────────────────────────────────────────────────
+# Dual-instrumented agent
+# ─────────────────────────────────────────────────────────────────────────────
 
-    The @vidimus.audit decorator captures the full input/output for the
-    tamper-evident Merkle store. We separately push the same call to Opik
-    for the operational dashboard.
+
+def make_dual_agent():
+    """Return an agent function decorated by BOTH Opik and Vidimus.
+
+    The order matters: outer decorators are called first, so put Opik on the
+    outside (so it sees the original input) and Vidimus on the inside (so it
+    audits the post-validation call).
     """
-    # 1. Simulate retrieval
-    time.sleep(0.01)
-    retrieved_docs = [
-        f"Doc about {question.split()[0]}: ...",
-        f"Doc about {question.split()[-1]}: ...",
-    ]
+    if _opik_available():
+        import opik
 
-    # 2. Simulate LLM call
-    time.sleep(0.05)
-    answer = f"Based on {len(retrieved_docs)} retrieved documents, the answer to {question!r} is 42."
+        @opik.track(name="my_agent")
+        @vidimus.audit
+        def agent(query: str) -> str:
+            # In real use: this is where your LLM call goes.
+            # Both Opik and Vidimus will record the same input/output.
+            return f"Response to: {query}"
 
-    # 3. Also send to Opik (dual-instrumented)
-    opik_client.trace(
-        name="rag_agent",
-        input={"question": question, "retrieved_docs": retrieved_docs},
-        output=answer,
-        metadata={"model": "gpt-4o-mini", "cost_usd": 0.0012},
-    )
+        return agent
 
-    return answer
+    # Fallback: vidimus only
+    @vidimus.audit
+    def agent(query: str) -> str:
+        return f"Response to: {query}"
+
+    return agent
 
 
-# ---------------------------------------------------------------------------
-# Drive it
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# Main flow
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 def main() -> None:
-    print("Running dual-instrumented agent (Opik + Vidimus)...\n")
+    print("=" * 70)
+    print("Vidimus + Comet Opik integration")
+    print("=" * 70)
 
-    questions = [
+    if _opik_available():
+        print("\n✓ Opik detected — traces will flow to Opik AND Vidimus in parallel")
+        opik_workspace = os.environ.get("OPIK_WORKSPACE", "default")
+        print(f"  Opik workspace: {opik_workspace}")
+    else:
+        print("\n⚠ Opik not installed — running with Vidimus only")
+        print("  To enable the dual-instrumentation pattern:")
+        print("      pip install opik")
+        print("      opik configure --api-key <your-key>")
+
+    # Initialize Vidimus
+    vidimus.init(
+        workspace="opik-integration-demo",
+        judges=["stub:judge-a", "stub:judge-b", "stub:judge-c"],
+    )
+
+    # Build the dual-instrumented agent
+    agent = make_dual_agent()
+
+    # Generate some traffic
+    queries = [
         "What is the capital of France?",
-        "How does photosynthesis work?",
-        "What is the speed of light?",
-        "Who wrote Hamlet?",
-        "What is the meaning of life?",
+        "Summarize the EU AI Act in one sentence.",
+        "Translate 'hello' to Japanese.",
+        "What is 2 + 2?",
+        "Explain how Merkle trees work.",
     ]
 
-    for q in questions:
-        print(f"Q: {q}")
-        a = rag_agent(q)
-        print(f"A: {a[:80]}...\n")
+    print(f"\nRunning {len(queries)} queries through the dual-instrumented agent...")
+    for q in queries:
+        agent(q)
 
-    # Now generate a Vidimus attestation over everything we just ran.
-    print("Generating Vidimus attestation...")
-    attestation = vidimus.attest(
-        workspace="opik-integration-demo",
-        judges=[],  # no LLM judges for this offline example
+    # Generate the Vidimus attestation (Opik's dashboard already has the
+    # traces, but only Vidimus produces a signed audit artifact)
+    print("\nGenerating Vidimus attestation...")
+    keypair = generate_keypair()
+    end = datetime.now(timezone.utc) + timedelta(seconds=1)
+    start = end - timedelta(hours=1)
+
+    attestation = attest(
+        metrics=["relevance", "accuracy"],
+        period_start=start,
+        period_end=end,
+        keypair=keypair,
+        seed=42,
     )
-    print(f"  Merkle root: {attestation.merkle_root[:16]}...")
+
+    out_path = Path("opik_attestation.json")
+    out_path.write_text(attestation.model_dump_json(indent=2))
+    print(f"  → {out_path}")
+    print(f"  Workspace:   {attestation.workspace}")
     print(f"  Trace count: {attestation.trace_count}")
-    print(f"  Signed by:   {attestation.issuer_pubkey_fingerprint[:16]}...")
+    print(f"  Merkle root: {attestation.merkle_root[:32]}...")
+    print(f"  Signature:   {attestation.signature[:32]}...")
 
-    # Save and verify
-    attestation.save("opik_integration_report.json")
-    print("\nAttestation saved to opik_integration_report.json")
+    # Verify
+    print("\nVerifying attestation offline...")
+    ok, issues, warnings = verify(attestation)
+    if ok:
+        print("  ✓ Cryptographic verification PASSED")
+    else:
+        print("  ✗ Verification FAILED")
+        for i in issues:
+            print(f"    - {i}")
+    for w in warnings:
+        print(f"  ⚠ {w}")
 
-    ok, issues, warnings = vidimus.verify("opik_integration_report.json")
-    print(f"Verification: {'PASS' if ok else 'FAIL'}")
-    if warnings:
-        print(f"  Warnings: {warnings}")
+    print("\n" + "=" * 70)
+    print("If Opik is configured, the same traces are visible in the Opik UI.")
+    print("Vidimus complements Opik by adding the signed attestation artifact.")
+    print("=" * 70)
 
 
 if __name__ == "__main__":
     main()
-
-
-# ---------------------------------------------------------------------------
-# Why this matters
-# ---------------------------------------------------------------------------
-#
-# With Opik alone, your traces live in Opik's database. If your auditor asks
-# whether the data was modified after the fact, you have to argue from
-# infrastructure controls ("only our SREs have DB access, here are the audit
-# logs of the audit logs..."). That argument is fragile.
-#
-# With Vidimus on top, the same agent run produces a signed attestation that:
-#   - has a Merkle root over every trace (modification is detectable)
-#   - carries the public-key fingerprint of the signer (forgery is impossible
-#     without the private key)
-#   - is verifiable offline by anyone, with no trust in Vidimus or in you
-#
-# You keep all the Opik benefits (dashboards, replay, debugging) AND gain a
-# portable cryptographic proof. That is the design goal: not "replace your
-# observability tool", but "add the trust layer it cannot provide."

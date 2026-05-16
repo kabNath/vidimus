@@ -246,6 +246,98 @@ def verify(file: Path) -> None:
 
 
 @cli.command()
+@click.argument("trace_id")
+@click.option("--against", "attestation_path", required=True, type=click.Path(exists=True),
+              help="Path to the attestation JSON to prove inclusion against.")
+def prove(trace_id: str, attestation_path: str) -> None:
+    """Generate an inclusion proof for a specific trace.
+
+    Given an attestation file and a trace_id, this command produces a Merkle
+    inclusion proof showing that the trace is one of the leaves whose root is
+    signed in the attestation. The proof is logarithmic in the trace count
+    and can be verified independently.
+    """
+    from vidimus.audit.merkle import MerkleTree
+    from vidimus.config import get_config
+
+    # Load attestation
+    att = Attestation.model_validate_json(Path(attestation_path).read_text())
+    console.print(f"[bold]Attestation:[/bold] {attestation_path}")
+    console.print(f"  workspace:    {att.workspace}")
+    console.print(f"  trace count:  {att.trace_count}")
+    console.print(f"  Merkle root:  {att.merkle_root[:48]}...")
+
+    # Find the trace in the local store
+    config = get_config()
+    traces = config.store.list_traces(
+        workspace=att.workspace,
+        start=att.period_start,
+        end=att.period_end,
+    )
+
+    target_index = next((i for i, t in enumerate(traces) if t.trace_id == trace_id), None)
+    if target_index is None:
+        console.print(f"[red]✗ trace {trace_id!r} not found in store for this attestation window[/red]")
+        sys.exit(1)
+
+    # Rebuild Merkle tree to extract proof
+    import hashlib
+    from vidimus.audit.canonical import canonicalize
+
+    leaves = [hashlib.sha256(canonicalize(t.model_dump(mode="json"))).digest() for t in traces]
+    tree = MerkleTree(leaves)
+    proof = tree.proof(target_index)
+
+    if tree.root.hex() != att.merkle_root:
+        console.print(
+            f"[red]✗ local Merkle root {tree.root.hex()[:32]}... does not match attestation root {att.merkle_root[:32]}...[/red]"
+        )
+        console.print("  This usually means the trace store has been modified since the attestation was generated.")
+        sys.exit(2)
+
+    console.print("\n[bold green]✓ Inclusion proof:[/bold green]")
+    console.print(f"  trace id:     {trace_id}")
+    console.print(f"  leaf index:   {target_index} of {len(leaves)}")
+    console.print(f"  leaf hash:    {proof.leaf_hash.hex()[:32]}...")
+    console.print(f"  proof length: {len(proof.path)} hashes")
+    for i, sibling in enumerate(proof.path):
+        console.print(f"    [{i}] {sibling.hex()[:48]}...")
+
+
+@cli.command()
+@click.option("--workspace", default=None, help="Workspace to assign incoming traces to.")
+@click.option("--host", default="0.0.0.0", help="Bind address.")
+@click.option("--port", default=4318, type=int, help="Listening port (4318 is the OTLP standard).")
+def serve(workspace: str | None, host: str, port: int) -> None:
+    """Start the OpenTelemetry OTLP/HTTP receiver.
+
+    This command launches a FastAPI server on the OpenTelemetry standard port
+    (4318). Any OTLP-compatible exporter (Opik, Langfuse, LangChain, raw OTel
+    SDK, etc.) can be pointed at this endpoint to forward traces to Vidimus.
+
+    Requires the [otel] extra: pip install vidimus[otel]
+    """
+    try:
+        from vidimus.receivers import OTLPHttpReceiver
+    except ImportError as exc:
+        console.print(f"[red]✗ {exc}[/red]")
+        sys.exit(1)
+
+    config = get_config()
+    ws = workspace or config.workspace
+
+    console.print(f"[bold]Starting Vidimus OTLP receiver[/bold]")
+    console.print(f"  workspace : {ws}")
+    console.print(f"  address   : http://{host}:{port}")
+    console.print(f"  endpoint  : POST /v1/traces")
+    console.print(f"  health    : GET  /health")
+    console.print()
+
+    receiver = OTLPHttpReceiver(workspace=ws, host=host, port=port)
+    receiver.run()
+
+
+@cli.command()
 def version() -> None:
     """Print the Vidimus version."""
     console.print(f"vidimus {__version__}")

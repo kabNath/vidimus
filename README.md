@@ -93,10 +93,25 @@ The image is a multi-stage build (~150 MB final), runs as a non-root user, and s
 | File | What it demonstrates |
 |---|---|
 | [`examples/basic_agent.py`](examples/basic_agent.py) | Minimal end-to-end: instrument an agent, attest, verify, detect tampering |
-| [`examples/rag_with_vidimus.py`](examples/rag_with_vidimus.py) | Full RAG pipeline (retriever + generator) instrumented with `@vidimus.audit` |
-| [`examples/opik_integration.py`](examples/opik_integration.py) | Drop-in alongside Comet Opik via OpenTelemetry |
-| [`examples/langchain_integration.py`](examples/langchain_integration.py) | LangChain agent flowing into Vidimus through the OTel exporter |
+| [`examples/rag_with_vidimus.py`](examples/rag_with_vidimus.py) | Didactic RAG (TF-IDF retriever + stub generator) showing the instrumentation pattern |
+| [`examples/rag_production.py`](examples/rag_production.py) | **Production RAG** with sentence-transformers embeddings, FAISS index, and Ollama generator |
+| [`examples/opik_integration.py`](examples/opik_integration.py) | Dual decoration (`@opik.track` + `@vidimus.audit`) — Vidimus on top of Comet Opik |
+| [`examples/langchain_integration.py`](examples/langchain_integration.py) | LangChain Q&A chain instrumented with Vidimus via OpenTelemetry |
 
+
+
+## How Vidimus differs from existing LLM observability tools
+
+|  | Vidimus | Opik | Langfuse | LangSmith |
+|---|---|---|---|---|
+| Tamper-evident trace storage | ✅ Merkle-chained | ❌ | ❌ | ❌ |
+| Calibrated uncertainty on metrics | ✅ Bootstrap CI + multi-judge κ | ❌ Point estimates | ❌ Point estimates | ❌ Point estimates |
+| Cryptographic attestation artifacts | ✅ Ed25519-signed | ❌ | ❌ | ❌ |
+| Optional on-chain anchoring | ✅ EVM-compatible | ❌ | ❌ | ❌ |
+| Offline third-party verification | ✅ | ❌ | ❌ | ❌ |
+| OpenTelemetry-native | ✅ | Partial | ✅ | ❌ |
+| Self-host footprint | Single binary + SQLite/DuckDB | Java + ClickHouse + Postgres + Redis | Postgres + ClickHouse | N/A (cloud only) |
+| License | Apache 2.0 | Apache 2.0 | MIT | Proprietary |
 
 **Vidimus is complementary, not competitive.** Most users will run it *on top* of Opik or Langfuse: those tools provide the dashboards and integrations, Vidimus provides the trust layer they cannot.
 
@@ -192,6 +207,7 @@ If you use Vidimus in research, please cite:
 
 Vidimus is part of a broader research and engineering portfolio in trustworthy, distributed, and verifiable machine learning. If Vidimus is useful to you, these may be too:
 
+- **[SAGIN multi-UAV simulation](https://github.com/your-username/sagin-maddpg-hfl)** — Multi-UAV relay system over Daan District (Taipei) with Starlink backhaul, optimized via MADDPG and Hierarchical Federated Learning. Real GeoJSON terrain, DJI Matrice 300 kinematics, 3D Plotly visualization. The methodological backbone of `vidimus.optimize` (Module B).
 - **[AI Capital](https://ai-capital-ir.vercel.app)** — Live algorithmic trading system on QuantConnect with cross-asset momentum, six-indicator regime detection, and risk parity. The first production user of Vidimus attestations: monthly evaluation reports are signed with the same primitives this library provides.
 
 ## Acknowledgments
