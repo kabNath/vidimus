@@ -1,0 +1,81 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vidimus"
+version = "0.1.0a1"
+description = "The trust layer for agentic AI — tamper-evident traces, calibrated uncertainty, cryptographic attestations"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Wendenda Nathanael Kaboré" },
+]
+keywords = ["llm", "observability", "ai", "agents", "evaluation", "attestation", "merkle", "ed25519"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "pydantic>=2.5",
+    "cryptography>=42.0",
+    "click>=8.1",
+    "rich>=13.0",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+duckdb = ["duckdb>=0.10"]
+otel = ["opentelemetry-sdk>=1.20", "opentelemetry-exporter-otlp>=1.20"]
+onchain = ["web3>=6.0"]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "hypothesis>=6.90",
+    "ruff>=0.4",
+    "mypy>=1.8",
+    "pre-commit>=3.5",
+]
+all = ["vidimus[duckdb,otel,onchain]"]
+
+[project.urls]
+Homepage = "https://vidimus.ai"
+Documentation = "https://docs.vidimus.ai"
+Repository = "https://github.com/vidimus-ai/vidimus"
+Issues = "https://github.com/vidimus-ai/vidimus/issues"
+Changelog = "https://github.com/vidimus-ai/vidimus/blob/main/CHANGELOG.md"
+
+[project.scripts]
+vidimus = "vidimus.cli.main:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vidimus"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM", "RUF"]
+ignore = ["E501"]  # handled by formatter
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true

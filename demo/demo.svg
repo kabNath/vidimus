@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 540" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13">
+  <!-- Drop shadow -->
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+      <feOffset dx="0" dy="6"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.35"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Terminal window -->
+  <rect x="10" y="10" width="800" height="520" rx="10" fill="#1e1e2e" filter="url(#shadow)"/>
+
+  <!-- Title bar -->
+  <rect x="10" y="10" width="800" height="32" rx="10" fill="#181825"/>
+  <rect x="10" y="32" width="800" height="10" fill="#181825"/>
+  <!-- Traffic lights -->
+  <circle cx="32" cy="26" r="6" fill="#f38ba8"/>
+  <circle cx="52" cy="26" r="6" fill="#f9e2af"/>
+  <circle cx="72" cy="26" r="6" fill="#a6e3a1"/>
+  <text x="410" y="30" text-anchor="middle" fill="#7f849c" font-size="12">~/vidimus — demo</text>
+
+  <!-- Terminal content -->
+  <g fill="#cdd6f4">
+    <!-- Line 1: command -->
+    <text x="30" y="72"><tspan fill="#a6e3a1">$</tspan> <tspan fill="#cdd6f4">pip install vidimus</tspan></text>
+
+    <!-- Line 2-3: install output -->
+    <text x="30" y="92" fill="#7f849c">Successfully installed vidimus-0.1.0a1 cryptography-43.0.1 pydantic-2.9.2</text>
+
+    <!-- Line 5: command -->
+    <text x="30" y="124"><tspan fill="#a6e3a1">$</tspan> <tspan fill="#cdd6f4">python examples/basic_agent.py</tspan></text>
+
+    <!-- Demo output -->
+    <text x="30" y="152" fill="#89b4fa">Generating traces...</text>
+    <text x="30" y="180" fill="#a6e3a1">✓ Attestation written to attestation.json</text>
+    <text x="50" y="200" fill="#bac2de">workspace    : <tspan fill="#cdd6f4">demo-agent</tspan></text>
+    <text x="50" y="218" fill="#bac2de">trace count  : <tspan fill="#cdd6f4">50</tspan></text>
+    <text x="50" y="236" fill="#bac2de">Merkle root  : <tspan fill="#fab387">8f3603ebe2ccbe03fc8ed004dbb1d295...</tspan></text>
+    <text x="50" y="254" fill="#bac2de">issuer fp    : <tspan fill="#fab387">e557d4f3c6a8e3a446f11868f6106f04...</tspan></text>
+    <text x="50" y="272" fill="#bac2de">signature    : <tspan fill="#fab387">0bdb2513ccbf25509a82c84973247fff... (Ed25519)</tspan></text>
+
+    <text x="50" y="300" fill="#f9e2af">Metrics:</text>
+    <text x="70" y="318" fill="#cdd6f4">hallucination   <tspan fill="#f38ba8">56.00%</tspan>  CI [42.00%, 70.00%]  n=50  κ=-0.08</text>
+    <text x="70" y="336" fill="#cdd6f4">relevance       <tspan fill="#a6e3a1">44.00%</tspan>  CI [30.00%, 58.00%]  n=50  κ=-0.02</text>
+
+    <text x="30" y="368" fill="#89b4fa">Verifying offline...</text>
+    <text x="30" y="386" fill="#a6e3a1">✓ Cryptographic verification: PASSED</text>
+
+    <text x="30" y="418" fill="#89b4fa">Tampering with the attestation and re-verifying...</text>
+    <text x="30" y="436" fill="#f38ba8">✓ Tampering detected: Ed25519 signature does not verify</text>
+
+    <!-- Final prompt with blinking cursor -->
+    <text x="30" y="478"><tspan fill="#a6e3a1">$</tspan> <tspan fill="#cdd6f4">_</tspan></text>
+    <rect x="44" y="467" width="9" height="14" fill="#cdd6f4">
+      <animate attributeName="opacity" values="1;1;0;0" dur="1.1s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <!-- Caption -->
+  <text x="410" y="510" text-anchor="middle" fill="#6c7086" font-size="11" font-family="ui-sans-serif, system-ui, sans-serif">
+    instrument · attest · verify · detect tampering — entirely offline, ~3 seconds
+  </text>
+</svg>
