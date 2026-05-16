@@ -99,22 +99,6 @@ The image is a multi-stage build (~150 MB final), runs as a non-root user, and s
 | [`examples/langchain_integration.py`](examples/langchain_integration.py) | LangChain Q&A chain instrumented with Vidimus via OpenTelemetry |
 
 
-
-## How Vidimus differs from existing LLM observability tools
-
-|  | Vidimus | Opik | Langfuse | LangSmith |
-|---|---|---|---|---|
-| Tamper-evident trace storage | ✅ Merkle-chained | ❌ | ❌ | ❌ |
-| Calibrated uncertainty on metrics | ✅ Bootstrap CI + multi-judge κ | ❌ Point estimates | ❌ Point estimates | ❌ Point estimates |
-| Cryptographic attestation artifacts | ✅ Ed25519-signed | ❌ | ❌ | ❌ |
-| Optional on-chain anchoring | ✅ EVM-compatible | ❌ | ❌ | ❌ |
-| Offline third-party verification | ✅ | ❌ | ❌ | ❌ |
-| OpenTelemetry-native | ✅ | Partial | ✅ | ❌ |
-| Self-host footprint | Single binary + SQLite/DuckDB | Java + ClickHouse + Postgres + Redis | Postgres + ClickHouse | N/A (cloud only) |
-| License | Apache 2.0 | Apache 2.0 | MIT | Proprietary |
-
-**Vidimus is complementary, not competitive.** Most users will run it *on top* of Opik or Langfuse: those tools provide the dashboards and integrations, Vidimus provides the trust layer they cannot.
-
 ## Architecture
 
 ```
@@ -153,7 +137,7 @@ Vidimus will ship in three sequenced modules under one project — a trust stack
 | Module | Status | What it provides |
 |---|---|---|
 | **`vidimus.audit`** (Module A) | 🚧 alpha, this repo | Tamper-evident traces, calibrated uncertainty, cryptographic attestations |
-| **`vidimus.optimize`** (Module B) | 🗓 Q3 2026 | DRL-based prompt and agent optimization (PPO, MADDPG), with the same audit guarantees applied to the optimization process itself |
+| **`vidimus.optimize`** (Module B) | 🗓 2026 | DRL-based prompt and agent optimization (PPO, MADDPG), with the same audit guarantees applied to the optimization process itself |
 | **`vidimus.federate`** (Module C) | 🗓 2027 | Federated evaluation with secure aggregation and differential privacy, for data that cannot leave its environment |
 
 The thesis tying them together: **trustworthy agents that improve over time without compromising privacy.** Each module is independently useful and independently installable.
