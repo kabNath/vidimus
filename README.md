@@ -191,7 +191,6 @@ If you use Vidimus in research, please cite:
 
 Vidimus is part of a broader research and engineering portfolio in trustworthy, distributed, and verifiable machine learning. If Vidimus is useful to you, these may be too:
 
-- **[SAGIN multi-UAV simulation](https://github.com/your-username/sagin-maddpg-hfl)** — Multi-UAV relay system over Daan District (Taipei) with Starlink backhaul, optimized via MADDPG and Hierarchical Federated Learning. Real GeoJSON terrain, DJI Matrice 300 kinematics, 3D Plotly visualization. The methodological backbone of `vidimus.optimize` (Module B).
 - **[AI Capital](https://ai-capital-ir.vercel.app)** — Live algorithmic trading system on QuantConnect with cross-asset momentum, six-indicator regime detection, and risk parity. The first production user of Vidimus attestations: monthly evaluation reports are signed with the same primitives this library provides.
 
 ## Acknowledgments
