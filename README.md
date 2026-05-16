@@ -12,7 +12,7 @@
 [![Build](https://github.com/kabNath/vidimus/actions/workflows/ci.yml/badge.svg)](https://github.com/kabNath/vidimus/actions)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ed?logo=docker&logoColor=white)](#run-with-docker)
 
-[Documentation](https://docs.vidimus.ai) • [Quickstart](#quick-start) • [Roadmap](#roadmap)
+[Quickstart](docs/quickstart.md) • [Architecture](ARCHITECTURE.md) • [Roadmap](ROADMAP.md)
 
 </div>
 
