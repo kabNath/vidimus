@@ -189,10 +189,21 @@ If you use Vidimus in research, please cite:
 
 ## Related projects
 
-Vidimus is part of a broader research and engineering portfolio in trustworthy, distributed, and verifiable machine learning. If Vidimus is useful to you, these may be too:
+Vidimus is part of a broader research portfolio at the intersection of **AI-native wireless systems** and **trustworthy AI infrastructure**.
 
-- **[AI Capital](https://ai-capital-ir.vercel.app)** — Live algorithmic trading system on QuantConnect with cross-asset momentum, six-indicator regime detection, and risk parity. The first production user of Vidimus attestations: monthly evaluation reports are signed with the same primitives this library provides.
+### AI-Native Wireless Systems
 
+- **[cuda-phy-channel-estimation](https://github.com/kabNath/cuda-phy-channel-estimation)** — GPU-accelerated 5G/6G physical-layer channel estimation in CUDA. Performance benchmarks against reference Python implementations.
+- **[sionna-link-adaptation-drl](https://github.com/kabNath/sionna-link-adaptation-drl)** — Deep reinforcement learning for link adaptation in 5G/6G, built on NVIDIA Sionna. Beats rule-based AMC baselines on user throughput.
+- **[federated-csi-feedback](https://github.com/kabNath/federated-csi-feedback)** — Federated learning for CSI feedback compression, preserving user-side privacy while improving overhead across cells.
+- **[sagin-maddpg-hfl](https://github.com/kabNath/sagin-maddpg-hfl)** — Multi-UAV relay system over Daan District (Taipei) with Starlink backhaul, optimized via MADDPG and Hierarchical Federated Learning.
+
+### Trustworthy AI Infrastructure & Applications
+
+- **Vidimus** *(this repo)* — Cryptographic provenance and calibrated uncertainty for LLM evaluation.
+- **[AI Capital](https://ai-capital-ir.vercel.app)** — Live algorithmic trading system on QuantConnect. Cross-asset momentum, regime detection, risk parity. First production user of Vidimus attestations.
+
+The unifying thesis: **AI systems that are both performant and accountable, from the wireless physical layer to autonomous agents.**
 ## Acknowledgments
 
 Vidimus stands on the shoulders of OpenTelemetry, Pydantic, FastAPI, DuckDB, and the broader LLM observability community — Opik, Langfuse, LangSmith, OpenLLMetry, Phoenix. The statistical methodology draws on Fleiss (1971), Krippendorff (1970), Efron (1979), and the long line of work on inter-rater reliability that the LLM-as-judge literature has, until now, largely ignored.
