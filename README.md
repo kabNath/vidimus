@@ -4,7 +4,7 @@
 
 ### The trust layer for agentic AI
 
-*Verifiable, auditable, cryptographically attested LLM and agent behavior — built on OpenTelemetry, complementary to Opik, Langfuse, LangSmith, and your existing stack.*
+*Verifiable, auditable, cryptographically attested LLM and agent behavior — for safety-critical, industrial, and research deployments where AI decisions must be reviewable after the fact.*
 
 [![Version](https://img.shields.io/badge/version-0.1.0a1-blue)](https://github.com/kabNath/vidimus/releases)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
