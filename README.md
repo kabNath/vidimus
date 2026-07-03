@@ -4,7 +4,7 @@
 
 ### The trust layer for agentic AI
 
-*Verifiable, auditable, cryptographically attested LLM and agent behavior — for safety-critical, industrial, and research deployments where AI decisions must be reviewable after the fact.*
+*Verifiable, auditable, cryptographically attested LLM and agent behavior for safety-critical, industrial, and research deployments where AI decisions must be reviewable after the fact.*
 
 [![Version](https://img.shields.io/badge/version-0.1.0a1-blue)](https://github.com/kabNath/vidimus/releases)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
@@ -28,13 +28,13 @@
 
 Modern LLM observability tools tell you *what* your agent did. None of them prove it.
 
-When a compliance officer asks "can you guarantee this evaluation report wasn't tampered with after the fact?" — the answer is no. When a regulator asks "what's the confidence interval on that hallucination score?" — the answer is silence. When a customer asks "can I verify this audit independently, without trusting your vendor?" — the answer is "trust us."
+When a compliance officer asks "can you guarantee this evaluation report wasn't tampered with after the fact?", the answer is no. When a regulator asks "what's the confidence interval on that hallucination score?", the answer is silence. When a customer asks "can I verify this audit independently, without trusting your vendor?", the answer is "trust us."
 
 Vidimus closes those gaps with three primitives the existing stack lacks:
 
-1. **Tamper-evident traces** — every agent interaction hashed and chained in a Merkle tree, so any post-hoc modification is detectable.
-2. **Calibrated uncertainty** — every evaluation metric ships with a bootstrap confidence interval and multi-judge agreement score, not a point estimate dressed up as truth.
-3. **Cryptographic attestations** — Ed25519-signed evaluation reports, optionally anchored on-chain (BNB Chain, Ethereum, or any EVM), verifiable offline by any third party.
+1. **Tamper-evident traces** every agent interaction hashed and chained in a Merkle tree, so any post-hoc modification is detectable.
+2. **Calibrated uncertainty** every evaluation metric ships with a bootstrap confidence interval and multi-judge agreement score, not a point estimate dressed up as truth.
+3. **Cryptographic attestations** Ed25519-signed evaluation reports, optionally anchored on-chain (BNB Chain, Ethereum, or any EVM), verifiable offline by any third party.
 
 Drop it in next to your existing observability tool in three lines, or run it standalone.
 
@@ -193,17 +193,17 @@ Vidimus is part of a broader research portfolio at the intersection of **AI-nati
 
 ### AI-Native Wireless Systems
 
-- **[cuda-phy-channel-estimation](https://github.com/kabNath/cuda-phy-channel-estimation)** — GPU-accelerated 5G/6G physical-layer channel estimation in CUDA. Performance benchmarks against reference Python implementations.
-- **[sionna-link-adaptation-drl](https://github.com/kabNath/sionna-link-adaptation-drl)** — Deep reinforcement learning for link adaptation in 5G/6G, built on NVIDIA Sionna. Beats rule-based AMC baselines on user throughput.
-- **[federated-csi-feedback](https://github.com/kabNath/federated-csi-feedback)** — Federated learning for CSI feedback compression, preserving user-side privacy while improving overhead across cells.
-- **[sagin-maddpg-hfl](https://github.com/kabNath/sagin-maddpg-hfl)** — Multi-UAV relay system over Daan District (Taipei) with Starlink backhaul, optimized via MADDPG and Hierarchical Federated Learning.
+- **[cuda-phy-channel-estimation](https://github.com/kabNath/cuda-phy-channel-estimation)** GPU-accelerated 5G/6G physical-layer channel estimation in CUDA. Performance benchmarks against reference Python implementations.
+- **[sionna-link-adaptation-drl](https://github.com/kabNath/sionna-link-adaptation-drl)** Deep reinforcement learning for link adaptation in 5G/6G, built on NVIDIA Sionna. Beats rule-based AMC baselines on user throughput.
+- **[federated-csi-feedback](https://github.com/kabNath/federated-csi-feedback)** Federated learning for CSI feedback compression, preserving user-side privacy while improving overhead across cells.
+- **[sagin-maddpg-hfl](https://github.com/kabNath/sagin-maddpg-hfl)** Multi-UAV relay system over Daan District (Taipei) with Starlink backhaul, optimized via MADDPG and Hierarchical Federated Learning.
 
 ### Trustworthy AI Infrastructure & Applications
 
-- **Vidimus** *(this repo)* — Cryptographic provenance and calibrated uncertainty for LLM evaluation.
+- **Vidimus** *(this repo)* Cryptographic provenance and calibrated uncertainty for LLM evaluation.
 - **[AI Capital](https://ai-capital-ir.vercel.app)** — Live algorithmic trading system on QuantConnect. Cross-asset momentum, regime detection, risk parity. First production user of Vidimus attestations.
 
 The unifying thesis: **AI systems that are both performant and accountable, from the wireless physical layer to autonomous agents.**
 ## Acknowledgments
 
-Vidimus stands on the shoulders of OpenTelemetry, Pydantic, FastAPI, DuckDB, and the broader LLM observability community — Opik, Langfuse, LangSmith, OpenLLMetry, Phoenix. The statistical methodology draws on Fleiss (1971), Krippendorff (1970), Efron (1979), and the long line of work on inter-rater reliability that the LLM-as-judge literature has, until now, largely ignored.
+Vidimus stands on the shoulders of OpenTelemetry, Pydantic, FastAPI, DuckDB, and the broader LLM observability community Opik, Langfuse, LangSmith, OpenLLMetry, Phoenix. The statistical methodology draws on Fleiss (1971), Krippendorff (1970), Efron (1979), and the long line of work on inter-rater reliability that the LLM-as-judge literature has, until now, largely ignored.
