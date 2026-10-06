@@ -92,6 +92,31 @@ for (const engine of ["webcrypto", "embedded"]) {
   check("unsupported version is a failure", !(await V.verifyAttestation(webcrypto, wrongVer)).ok);
 }
 
+// --- per-verdict attestations (vidimus-svc.verdict-attestation.v1), exported from the conformance app demo --------
+{
+  const VFP = readFileSync(join(here, "examples", "verdict-trusted-keys.txt"), "utf8").split("\n").find((l) => l && !l.startsWith("#")).trim();
+  for (const engine of ["webcrypto", "embedded"]) {
+    const v = await V.verifyVerdictAttestation(webcrypto, load("verdict-valid.json"), { engine });
+    check(`[${engine}] verdict-valid: content hash and signature pass; unpinned → integrity only (pinned = not_checked)`, v.ok && status(v, "content") === "pass" && status(v, "signature") === "pass" && status(v, "pinned") === "not_checked");
+    const vp = await V.verifyVerdictAttestation(webcrypto, load("verdict-valid.json"), { engine, trustedKeys: [VFP] });
+    check(`[${engine}] verdict-valid pinned to the real signer: pinned = pass`, vp.ok && vp.pinned && status(vp, "pinned") === "pass");
+    const t = await V.verifyVerdictAttestation(webcrypto, load("verdict-tampered.json"), { engine, trustedKeys: [VFP] });
+    check(`[${engine}] verdict-TAMPERED (one character of the requirement): content hash fails → REFUSED`, !t.ok && status(t, "content") === "fail");
+    const w = await V.verifyVerdictAttestation(webcrypto, load("verdict-wrong-key.json"), { engine, trustedKeys: [VFP] });
+    check(`[${engine}] verdict-wrong-key (self-consistent, other signer), pinned to the real signer → REFUSED`, !w.ok && status(w, "pinned") === "fail" && status(w, "signature") === "pass" && status(w, "content") === "pass");
+    const wu = await V.verifyVerdictAttestation(webcrypto, load("verdict-wrong-key.json"), { engine });
+    check(`[${engine}] verdict-wrong-key unpinned passes as integrity-only (and says the signer is not pinned)`, wu.ok && status(wu, "pinned") === "not_checked");
+  }
+  const bad = load("verdict-valid.json"); bad.attestation.calibrated_confidence = 0.99;
+  check("verdict: changing the confidence after signing is detected", !(await V.verifyVerdictAttestation(webcrypto, bad)).ok);
+  const bad2 = load("verdict-valid.json"); bad2.verdict = "conformant";
+  check("verdict: changing the verdict after signing is detected", !(await V.verifyVerdictAttestation(webcrypto, bad2)).ok);
+  const bad3 = load("verdict-valid.json"); bad3.citations = ["3GPP Other v1 §9"];
+  check("verdict: changing the cited clause after signing is detected", !(await V.verifyVerdictAttestation(webcrypto, bad3)).ok);
+  const bad4 = load("verdict-valid.json"); delete bad4.attestation.signature;
+  check("verdict: a malformed file is refused, not crashed on", !(await V.verifyVerdictAttestation(webcrypto, bad4)).ok);
+}
+
 // --- canonicalisation spot checks (full cross-check against Python lives in tests/test_browser_verifier.py)
 check("canonical: sorted keys, no spaces", V.canonicalize({ b: 1, a: [true, null, "x"] }) === '{"a":[true,null,"x"],"b":1}');
 check("canonical: Python-style float repr", ["1e-05", "0.0001", "1.5e-07", "1e+16", "0.1"].every((s) => V.fmtNumber(Number(s)) === s));

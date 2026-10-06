@@ -40,7 +40,7 @@
 <body>
 <main>
   <h1>Vidimus attestation verifier</h1>
-  <p class="lead">Runs entirely in this page: no server, no network, nothing leaves your browser. It reports what was
+  <p class="lead">Verifies a Vidimus batch attestation (<code>vidimus.attestation.v1</code>) or a per-verdict attestation exported by the conformance app (<code>vidimus-svc.verdict-attestation.v1</code>). Runs entirely in this page: no server, no network, nothing leaves your browser. It reports what was
   checked and, just as clearly, what was <b>not</b> checked.</p>
 
   <section>
@@ -239,7 +239,52 @@ const VidimusVerifier = (() => {
     return { checks, ok, engine, payloadHash, pinned };
   }
 
-  return { canonicalize, verifyAttestation, verifyEd25519, verifyEmbedded, fmtNumber, hex, unhex, NOT_PINNED };
+  // ---- per-verdict attestation of the conformance sidecar (vidimus-svc /attest) ----------------------------
+  // The sidecar signs the SHA-256 (hex text) of the canonical JSON of this payload; key_id and issued_at are part of it.
+  const VERDICT_TYPE = "vidimus-svc.verdict-attestation.v1";
+  async function verifyVerdictAttestation(crypto, doc, opts = {}) {
+    const checks = []; const add = (id, label, status, detail) => checks.push({ id, label, status, detail });
+    const a = doc && doc.attestation;
+    const need = ["calibrated", "calibrated_confidence", "ci_low", "ci_high", "raw_confidence", "calibration_version", "n_reference", "tranche_n", "key_id", "issued_at", "content_hash", "signature", "public_key"];
+    const missing = !a ? need : need.filter((k) => !(k in a));
+    if (doc.type !== VERDICT_TYPE || typeof doc.requirement !== "string" || typeof doc.verdict !== "string" || !Array.isArray(doc.citations) || missing.length) {
+      add("format", "Format", FAIL, `expected ${VERDICT_TYPE} with requirement, verdict, citations and attestation fields` + (missing.length ? `; missing: ${missing.join(", ")}` : ""));
+      return { checks, ok: false, engine: null, payloadHash: null, pinned: false, kind: "verdict" };
+    }
+    add("format", "Format", PASS, VERDICT_TYPE);
+    const trusted = opts.trustedKeys && opts.trustedKeys.length ? opts.trustedKeys.map((k) => k.trim().toLowerCase()).filter(Boolean) : null;
+    let pk;
+    try { pk = unhex(a.public_key); if (pk.length !== 32) throw new Error("public key must be 32 bytes"); }
+    catch (e) { add("key", "Signing key", FAIL, "invalid public key: " + e.message); return { checks, ok: false, engine: null, payloadHash: null, pinned: false, kind: "verdict" }; }
+    const fp = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", pk)));
+    add("fingerprint", "key_id matches the public key", fp === a.key_id ? PASS : FAIL, fp === a.key_id ? fp : `signed key_id ${a.key_id} ≠ derived ${fp}`);
+
+    const payload = { requirement: doc.requirement, verdict: doc.verdict, calibrated: a.calibrated, calibrated_confidence: a.calibrated_confidence,
+      ci_low: a.ci_low, ci_high: a.ci_high, raw_confidence: a.raw_confidence, calibration_version: a.calibration_version,
+      n_reference: a.n_reference, tranche_n: a.tranche_n, key_id: a.key_id, issued_at: a.issued_at, citations: doc.citations };
+    const hash = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(canonicalize(payload)))));
+    add("content", "Content hash recomputed from the displayed fields", hash === a.content_hash ? PASS : FAIL,
+      hash === a.content_hash ? `SHA-256 ${hash}` : "does NOT match: the requirement, verdict, citations or confidence were altered after signing");
+
+    let sigOk = false, engine = null;
+    try { const r = await verifyEd25519(crypto, pk, unhex(a.signature), enc.encode(a.content_hash), opts.engine || "auto"); sigOk = r.ok; engine = r.engine; }
+    catch (e) { add("signature", "Ed25519 signature", FAIL, "could not verify: " + e.message); }
+    if (engine) add("signature", "Ed25519 signature", sigOk ? PASS : FAIL, sigOk ? `valid for the embedded key (engine: ${engine})` : "does NOT verify under the embedded key");
+
+    let pinned = false;
+    if (trusted === null) add("pinned", "Signer pinned", NC, NOT_PINNED);
+    else if (trusted.includes(fp) || trusted.includes(a.public_key.toLowerCase())) { pinned = true; add("pinned", "Signer pinned", PASS, "signing key matches a trusted key you provided"); }
+    else add("pinned", "Signer pinned", FAIL, `signing key ${fp} is not among the trusted keys you provided`);
+
+    add("calibration", "Confidence", a.calibrated ? PASS : WARN, a.calibrated
+      ? `calibrated ${a.calibrated_confidence} [${a.ci_low}, ${a.ci_high}] from tranche accuracy (${a.tranche_n} items, table ${a.calibration_version}, ${a.n_reference} items)`
+      : `NOT calibrated (tranche too small): raw confidence ${a.raw_confidence} is an uncalibrated LLM signal`);
+    add("claims", "What the signature does not cover", NC, "that the verdict is correct, that the cited clauses exist in the specification, that the calibration table is the published one, and that issued_at is true (it is declared by the signer)");
+    const ok = !checks.some((c) => c.status === FAIL);
+    return { checks, ok, engine, payloadHash: hash, pinned, kind: "verdict" };
+  }
+
+  return { canonicalize, verifyAttestation, verifyVerdictAttestation, VERDICT_TYPE, verifyEd25519, verifyEmbedded, fmtNumber, hex, unhex, NOT_PINNED };
 })();
 </script>
 
@@ -257,12 +302,13 @@ const VidimusVerifier = (() => {
     try { att = JSON.parse($("json").value); } catch (e) { return banner("fail", "Not valid JSON: " + e.message); }
     const pins = $("pins").value.split(/\s+/).filter(Boolean);
     let r;
-    try { r = await VidimusVerifier.verifyAttestation(window.crypto, att, { trustedKeys: pins }); }
+    try { r = att.type === VidimusVerifier.VERDICT_TYPE ? await VidimusVerifier.verifyVerdictAttestation(window.crypto, att, { trustedKeys: pins })
+                                                         : await VidimusVerifier.verifyAttestation(window.crypto, att, { trustedKeys: pins }); }
     catch (e) { return banner("fail", "Verification error: " + e.message); }
     const sig = r.checks.find((c) => c.id === "signature");
     if (!r.ok) banner("fail", "FAILED — do not trust this attestation (see failed checks).");
     else if (!r.pinned) banner("warn", "Integrity verified only. The issuer's identity was NOT verified (no pinned key).");
-    else banner("pass", "Integrity and issuer verified. The Merkle root and the on-chain anchor were not checked here.");
+    else banner("pass", r.kind === "verdict" ? "Integrity and signer verified. The verdict itself and the cited clauses were not checked here." : "Integrity and issuer verified. The Merkle root and the on-chain anchor were not checked here.");
     for (const c of r.checks) {
       const li = document.createElement("li"); li.className = c.status;
       const tag = document.createElement("div"); tag.className = "tag"; tag.textContent = ICON[c.status];

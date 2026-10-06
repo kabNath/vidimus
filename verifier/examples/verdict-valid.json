@@ -1,0 +1,23 @@
+{
+  "type": "vidimus-svc.verdict-attestation.v1",
+  "requirement": "The terminal shall apply the parameters of a SessionUpdate message in an arbitrary order.",
+  "verdict": "gap",
+  "citations": [
+    "3GPP LCP Demo v1.0 §5.3.5"
+  ],
+  "attestation": {
+    "calibrated": true,
+    "calibrated_confidence": 0.9423,
+    "ci_low": 0.7842,
+    "ci_high": 0.9866,
+    "raw_confidence": 0.96,
+    "calibration_version": "cal-102be0bdb9d1",
+    "n_reference": 40,
+    "tranche_n": 26,
+    "key_id": "85ac30de1f1542c45a778351c32f7cf1fee7346d534a0c9059e5bbfe51cd84be",
+    "issued_at": "2026-10-06T14:10:48Z",
+    "content_hash": "750c763166da5f5a0484a39be2b1a6d9c86d0234fea27bef876acd24875c46ed",
+    "signature": "7f5844d58599fc46d099c2102b762960b3298be5bdd534ab98df0e25a8270c0ce1fbc31fcee05f471a21d49b7426b424d1eda49e442586e624d16b1e546a5d0d",
+    "public_key": "090e93534a2f1002b84beac8990905761965abd16b208858de09c546154fa612"
+  }
+}

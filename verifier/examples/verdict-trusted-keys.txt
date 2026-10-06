@@ -1,0 +1,2 @@
+# Fingerprint of the demo sidecar key that signed verdict-valid.json and verdict-tampered.json
+85ac30de1f1542c45a778351c32f7cf1fee7346d534a0c9059e5bbfe51cd84be
