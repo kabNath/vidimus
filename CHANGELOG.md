@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `Attestation.merkle_scheme` (`"rfc6962-v1"` | `"legacy-duplicate"`). New attestations are `rfc6962-v1` and the field is covered by the signature (it cannot be downgraded). Files without the field are loaded as `legacy-duplicate`, still verify (the field is left out of their signed bytes and anchor hash), recompute their root with the old rule in `verify --traces`, and make `verify` warn. `prove` refuses legacy attestations.
 
 ### Changed (behaviour)
-- Default store is now a persistent DuckDB file per workspace (`<home>/workspaces/<workspace>/traces.duckdb`; `$VIDIMUS_HOME` overrides `~/.vidimus`). `init(store="memory")` or `VIDIMUS_STORE=memory` keeps the ephemeral store. Without the `duckdb` extra it falls back to memory with a `RuntimeWarning`.
+- Default store is now a persistent DuckDB file per workspace (`<home>/workspaces/<workspace>/traces.duckdb`; `$VIDIMUS_HOME` overrides `~/.vidimus`). `init(store="memory")` or `VIDIMUS_STORE=memory` keeps the ephemeral store. `duckdb>=0.10` is now a **core dependency** (the `[duckdb]` extra stays as an alias); if the import fails anyway it falls back to memory with a `RuntimeWarning`.
 - `vidimus init` remembers the workspace (`<home>/config.json`) and no longer wipes existing traces; use `vidimus init --reset [--yes]`. `attest`, `prove` and `export` now work across terminals.
 
 ### Documentation

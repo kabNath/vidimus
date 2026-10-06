@@ -43,7 +43,7 @@ def _build_store(kind: str | None, home_dir: Path, workspace: str) -> Any:
     except ImportError:
         warnings.warn(
             "duckdb is not installed: traces are kept in memory and lost when this process "
-            "exits, and the CLI cannot see them. Install with: pip install vidimus[duckdb]",
+            "exits, and the CLI cannot see them. Reinstall vidimus (duckdb is a core dependency).",
             RuntimeWarning,
             stacklevel=3,
         )

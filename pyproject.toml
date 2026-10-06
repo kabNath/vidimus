@@ -32,10 +32,11 @@ dependencies = [
     "click>=8.1",
     "rich>=13.0",
     "numpy>=1.24",
+    "duckdb>=0.10",  # default persistent trace store
 ]
 
 [project.optional-dependencies]
-duckdb = ["duckdb>=0.10"]
+duckdb = ["duckdb>=0.10"]  # kept for backwards compatibility: duckdb is now a core dependency
 otel = ["opentelemetry-sdk>=1.20", "fastapi>=0.110", "uvicorn>=0.29"]
 onchain = ["web3>=6.0"]
 openai = ["openai>=1.40"]
