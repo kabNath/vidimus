@@ -26,7 +26,7 @@
 
 ## Why Vidimus exists
 
-Modern LLM observability tools tell you *what* your agent did. None of them prove it.
+Modern LLM observability tools tell you *what* your agent did. Some tools can already prove the *integrity* of records (hash chains, signed logs, transparency logs); what is rarely shipped with an evaluation report is a **metric with an explicit confidence interval and a measure of agreement between judges**, together with a signature a third party can check offline. That combination is what Vidimus adds.
 
 When a compliance officer asks "can you guarantee this evaluation report wasn't tampered with after the fact?", the answer is no. When a regulator asks "what's the confidence interval on that hallucination score?", the answer is silence. When a customer asks "can I verify this audit independently, without trusting your vendor?", the answer is "trust us."
 
@@ -120,6 +120,17 @@ The image is a multi-stage build (~150 MB final), runs as a non-root user, and s
 | [`examples/langchain_integration.py`](examples/langchain_integration.py) | LangChain Q&A chain instrumented with Vidimus via OpenTelemetry |
 
 
+## Known limitations
+
+Read these before relying on an attestation.
+
+- **A signature proves integrity, not identity.** The issuer's public key is embedded in the report, so anyone can produce a self-consistent, validly signed report with their own key. **Pin the issuer key**: `vidimus verify report.json --trusted-key <fingerprint>` (or `--trusted-keys-file`). Without it, `verify` warns: *issuer key not pinned: signature proves integrity, not identity*.
+- **Garbage in, garbage out.** Vidimus proves that the traces and scores were not altered after signing. It does not prove that the traces are complete, that the agent was instrumented everywhere, or that the judges' scores are *right*.
+- **Judge bias is not captured by the interval.** The bootstrap interval measures sampling noise over the scored traces. If all LLM judges share the same blind spot or bias (same model family, same prompt), they will agree with each other and be wrong together; high inter-judge agreement (κ) is not evidence of correctness. The stub judges used in examples are heuristics, not evaluators.
+- **The Merkle root is only checked if you ask.** `vidimus verify` recomputes it only with `--traces <export>`, and checks the on-chain anchor only with `--check-anchor`; otherwise it prints `not checked`. An on-chain anchor adds a public timestamp, not extra cryptographic strength.
+- **The CLI reads the in-process store.** The default store is in-memory, and `vidimus attest` / `prove` / `export` use the store of the current process. Traces recorded by another process are not visible to the CLI unless you configure a shared store (e.g. DuckDB) in Python.
+- **Alpha software.** APIs and the Merkle layout can change between releases.
+
 ## Architecture
 
 ```
@@ -177,7 +188,7 @@ See [ROADMAP.md](ROADMAP.md) for the detailed plan.
 
 ## Status
 
-Vidimus is in **alpha**. The Python SDK surface may change before v1.0.0. The cryptographic primitives (Ed25519 signatures, SHA-256 Merkle trees, RFC 8785 canonical JSON) are stable and will not break. Production use is at your own risk until v1.0.
+Vidimus is in **alpha**. The Python SDK surface may change before v1.0.0. The cryptographic primitives (Ed25519 signatures, RFC 6962 Merkle trees, RFC 8785 canonical JSON) are expected to stay stable, but 0.1.0a3 changed the Merkle layout (see [CHANGELOG](CHANGELOG.md)); do not assume compatibility between alpha releases. Production use is at your own risk until v1.0.
 
 We are actively looking for:
 
