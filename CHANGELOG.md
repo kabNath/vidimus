@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 - `verify(attestation, trusted_keys=...)` and `vidimus verify --trusted-key / --trusted-keys-file`: pin the issuer key (fingerprint or hex public key). A pinned verification fails if the issuer is not listed.
 
+- `Attestation.merkle_scheme` (`"rfc6962-v1"` | `"legacy-duplicate"`). New attestations are `rfc6962-v1` and the field is covered by the signature (it cannot be downgraded). Files without the field are loaded as `legacy-duplicate`, still verify (the field is left out of their signed bytes and anchor hash), recompute their root with the old rule in `verify --traces`, and make `verify` warn. `prove` refuses legacy attestations.
+
 ### Documentation
 - README: replaced the absolute claim that no other tool proves integrity; added a "Known limitations" section (key pinning, garbage-in/garbage-out, shared judge bias, optional checks, in-process store).
 

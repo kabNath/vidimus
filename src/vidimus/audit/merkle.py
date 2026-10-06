@@ -159,6 +159,24 @@ class MerkleTree:
         )
 
 
+def legacy_merkle_root(leaves: list[bytes]) -> bytes:
+    """Root under the pre-0.1.0a3 rule (odd levels duplicate the last node).
+
+    Kept ONLY to verify attestations whose ``merkle_scheme`` is
+    ``legacy-duplicate``. It is ambiguous (``[a,b,c]`` and ``[a,b,c,c]``
+    collide) and must not be used to build new trees.
+    """
+    if not leaves:
+        raise ValueError("at least one leaf is required")
+    level = [_hash_leaf(d) for d in leaves]
+    while len(level) > 1:
+        level = [
+            _hash_node(level[i], level[i + 1] if i + 1 < len(level) else level[i])
+            for i in range(0, len(level), 2)
+        ]
+    return level[0]
+
+
 def verify_inclusion(proof: InclusionProof, root: bytes) -> bool:
     """Verify an inclusion proof against an expected root (RFC 9162 §2.1.3.2).
 

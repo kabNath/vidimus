@@ -16,7 +16,7 @@ from datetime import datetime
 from vidimus.audit.canonical import canonicalize
 from vidimus.audit.judges import Judge, build_judges
 from vidimus.audit.keys import KeyPair, public_key_from_hex
-from vidimus.audit.merkle import MerkleTree
+from vidimus.audit.merkle import MerkleTree, legacy_merkle_root
 from vidimus.audit.schemas import (
     Attestation,
     CalibratedMetric,
@@ -150,6 +150,7 @@ def attest(
         period_start=period_start,
         period_end=period_end,
         merkle_root=tree.root_hex,
+        merkle_scheme="rfc6962-v1",
         trace_count=tree.size,
         metrics=calibrated,
         issuer_pubkey_fingerprint=keypair.fingerprint,
@@ -248,7 +249,15 @@ def verify(
                 f"signature may be valid but the signer is not a pinned issuer"
             )
 
-    # 5. Inter-judge agreement (non-fatal).
+    # 5. Merkle scheme (non-fatal): the legacy rule is ambiguous.
+    if attestation.merkle_scheme == "legacy-duplicate":
+        warnings.append(
+            "legacy Merkle scheme (legacy-duplicate): the root was built by duplicating "
+            "the last node, so different trace lists can share a root; re-issue the "
+            "attestation with vidimus >= 0.1.0a3"
+        )
+
+    # 6. Inter-judge agreement (non-fatal).
     for m in attestation.metrics:
         if m.judge_agreement is not None and m.judge_agreement < 0.4:
             warnings.append(
@@ -281,7 +290,11 @@ def verify_traces(attestation: Attestation, traces: Iterable[Trace]) -> list[str
         )
     if not ordered:
         return issues or ["no traces provided"]
-    root = MerkleTree([leaf_bytes(t) for t in ordered]).root_hex
+    leaves = [leaf_bytes(t) for t in ordered]
+    if attestation.merkle_scheme == "legacy-duplicate":
+        root = legacy_merkle_root(leaves).hex()
+    else:
+        root = MerkleTree(leaves).root_hex
     if root != attestation.merkle_root:
         issues.append(
             f"Merkle root mismatch: recomputed {root}, attestation signs {attestation.merkle_root}"

@@ -439,6 +439,13 @@ def prove(trace_id: str, attestation_path: str) -> None:
         )
         sys.exit(1)
 
+    if att.merkle_scheme != "rfc6962-v1":
+        console.print(
+            "[red]✗ inclusion proofs are only supported for rfc6962-v1 attestations; "
+            f"this one uses {att.merkle_scheme!r}. Re-issue it with `vidimus attest`.[/red]"
+        )
+        sys.exit(2)
+
     # Rebuild Merkle tree to extract proof
     leaves = [leaf_bytes(t) for t in traces]
     tree = MerkleTree(leaves)

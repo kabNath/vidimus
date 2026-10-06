@@ -134,6 +134,12 @@ class Attestation(BaseModel):
     period_start: datetime
     period_end: datetime
     merkle_root: str = Field(description="hex-encoded SHA-256 of the Merkle root")
+    merkle_scheme: Literal["rfc6962-v1", "legacy-duplicate"] = Field(
+        default="legacy-duplicate",
+        description="tree rule behind merkle_root. Attestations written before "
+        "0.1.0a3 carry no such field and used 'legacy-duplicate' (odd levels duplicate "
+        "the last node); new ones are 'rfc6962-v1'. Signed, except for legacy.",
+    )
     trace_count: int = Field(ge=0)
     metrics: list[CalibratedMetric] = Field(default_factory=list)
     issuer_pubkey_fingerprint: str = Field(
@@ -149,14 +155,22 @@ class Attestation(BaseModel):
         "object with signature='' (detached signature pattern)",
     )
 
-    def to_signing_payload(self) -> bytes:
-        """Return the canonical JSON bytes that get signed.
+    def signing_dict(self) -> dict[str, Any]:
+        """The dict that is canonicalized for signing and anchoring.
 
-        The signature field is replaced with the empty string before
-        canonicalization, then the result is hashed and signed.
+        ``signature`` is blanked (detached-signature pattern). ``merkle_scheme``
+        is omitted for legacy attestations, which were signed before the field
+        existed, so they keep verifying; for ``rfc6962-v1`` it is part of the
+        signed bytes, so it cannot be downgraded without breaking the signature.
         """
-        from vidimus.audit.canonical import canonicalize
-
         d = self.model_dump(mode="json")
         d["signature"] = ""
-        return canonicalize(d)
+        if self.merkle_scheme == "legacy-duplicate":
+            del d["merkle_scheme"]
+        return d
+
+    def to_signing_payload(self) -> bytes:
+        """Return the canonical JSON bytes that get signed."""
+        from vidimus.audit.canonical import canonicalize
+
+        return canonicalize(self.signing_dict())
