@@ -61,15 +61,36 @@ Generate a signed attestation over the last 24 hours of traces:
 vidimus attest --since 24h --output report.json
 ```
 
-Anyone in the world can now verify it offline, without contacting your server:
+Export the traces the report covers, then verify offline, without contacting your server. Pin the issuer key (`--trusted-key`, or `--trusted-keys-file`) so the check proves *who* signed, not just that the file is intact:
 
 ```bash
-vidimus verify report.json
-# ✓ Merkle root matches 4,318 traces
-# ✓ Ed25519 signature valid (key: vidimus-ai/acme-prod)
-# ✓ Hallucination rate: 3.2% [95% CI: 2.7% – 3.8%, n=4,318, k=3 judges, agreement κ=0.82]
-# ✓ Optional on-chain anchor: BNB Chain block 47,892,134 (tx: 0xae9f...)
+vidimus export --against report.json -o traces.jsonl
+vidimus verify report.json --traces traces.jsonl --trusted-key c1410284d7b9c5b29ee0a22bd5553195d21de60070b9dd81ce02391beac137af
 ```
+
+```text
+✓ attestation report.json is valid
+⚠  warnings:
+    - metric 'hallucination': low inter-judge agreement (κ=0.03); interpret with extra caution
+  workspace    : acme-prod
+  period       : 2026-10-05 09:04:38.064727+00:00 → 2026-10-06 09:04:38.064727+00:00
+  trace count  : 40
+  Merkle root  : d02f29b042ea4f078c2d8cc7fdb157cd11e8428f2039729f09e889fedfe91f61
+  signed by    : c1410284d7b9c5b29ee0a22bd5553195d21de60070b9dd81ce02391beac137af
+  issuer pinned: yes
+  traces check : Merkle root matches 40 traces
+  on-chain     : none in report
+  hallucination            55.00% [CI 40.00% – 70.00%] n=40  κ=0.03
+```
+
+This is the real output of a run on 40 traces scored by three stub judges (values, timestamps and keys differ on every run; the low κ is expected from stub judges). `verify` only reports what it checked:
+
+| Line | When it is checked |
+|---|---|
+| signature, key/fingerprint, metric intervals | always |
+| `issuer pinned: yes` | with `--trusted-key` / `--trusted-keys-file`; otherwise a warning says the signature proves integrity, not identity |
+| `traces check : Merkle root matches N traces` | with `--traces <export>`; otherwise `not checked (pass --traces)` |
+| `on-chain` | with `--check-anchor --rpc-url <url>` (needs `pip install vidimus[onchain]`) when the report has an anchor; otherwise `not checked (pass --check-anchor)`, or `none in report` |
 
 That's it. You now have a portable, cryptographically verifiable artifact of your agent's behavior.
 

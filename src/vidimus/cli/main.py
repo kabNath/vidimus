@@ -5,7 +5,8 @@ Commands:
   vidimus keys generate                        Generate a new Ed25519 keypair
   vidimus keys list                            List local keys
   vidimus attest --since 24h --output r.json   Generate a signed attestation
-  vidimus verify r.json                        Verify offline
+  vidimus verify r.json [--traces t.jsonl]     Verify offline (optionally recompute the Merkle root)
+  vidimus export --against r.json              Export the attested traces
   vidimus version                              Print version
 """
 
@@ -23,14 +24,14 @@ from rich.table import Table
 
 from vidimus import __version__
 from vidimus.audit.attest import attest as do_attest
-from vidimus.audit.attest import leaf_bytes
+from vidimus.audit.attest import leaf_bytes, verify_traces
 from vidimus.audit.attest import verify as do_verify
 from vidimus.audit.keys import generate_keypair, load_keypair, save_keypair
-from vidimus.audit.schemas import Attestation
+from vidimus.audit.schemas import Attestation, Trace
 from vidimus.config import get_config
 from vidimus.config import init as init_config
 
-console = Console()
+console = Console(soft_wrap=True)
 
 
 @click.group()
@@ -217,12 +218,44 @@ def attest(
     default=None,
     help="File with one trusted fingerprint/public key per line ('#' starts a comment).",
 )
-def verify(file: Path, trusted_key: tuple[str, ...], trusted_keys_file: Path | None) -> None:
+@click.option(
+    "--traces",
+    "traces_file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Trace export (JSONL or JSON array, see `vidimus export`): recompute the "
+    "Merkle root and compare it to the signed one.",
+)
+@click.option(
+    "--check-anchor",
+    is_flag=True,
+    help="Check the on-chain anchor against the chain (needs vidimus[onchain] and --rpc-url).",
+)
+@click.option(
+    "--rpc-url",
+    envvar="VIDIMUS_RPC_URL",
+    default=None,
+    help="JSON-RPC endpoint for --check-anchor (env: VIDIMUS_RPC_URL).",
+)
+def verify(
+    file: Path,
+    trusted_key: tuple[str, ...],
+    trusted_keys_file: Path | None,
+    traces_file: Path | None,
+    check_anchor: bool,
+    rpc_url: str | None,
+) -> None:
     """Verify an attestation file offline.
 
-    Without --trusted-key/--trusted-keys-file the signature only proves
-    integrity, not who issued the report.
+    By default only the signature, the metric intervals and the embedded
+    fields are checked. Without --trusted-key/--trusted-keys-file the
+    signature proves integrity, not who issued the report. The Merkle root
+    and the on-chain anchor are verified only with --traces / --check-anchor;
+    otherwise they are reported as "not checked".
     """
+    if check_anchor and not rpc_url:
+        raise click.UsageError("--check-anchor requires --rpc-url (or VIDIMUS_RPC_URL)")
+
     data = json.loads(file.read_text())
     attestation = Attestation.model_validate(data)
 
@@ -235,6 +268,30 @@ def verify(file: Path, trusted_key: tuple[str, ...], trusted_keys_file: Path | N
                 if line:
                     pinned.append(line)
     ok, issues, warnings = do_verify(attestation, trusted_keys=pinned)
+
+    merkle_line = "not checked (pass --traces)"
+    if traces_file is not None:
+        try:
+            traces = _load_traces(traces_file)
+        except (ValueError, OSError) as e:
+            raise click.ClickException(f"cannot read traces from {traces_file}: {e}") from e
+        merkle_issues = verify_traces(attestation, traces)
+        if merkle_issues:
+            issues.extend(merkle_issues)
+            ok = False
+            merkle_line = "MISMATCH"
+        else:
+            merkle_line = f"Merkle root matches {len(traces):,} traces"
+
+    if attestation.onchain_anchor is None:
+        anchor_line = "none in report"
+    elif not check_anchor:
+        anchor_line = "not checked (pass --check-anchor)"
+    else:
+        anchor_issue, anchor_line = _check_anchor(attestation, rpc_url or "")
+        if anchor_issue:
+            issues.append(anchor_issue)
+            ok = False
 
     if ok:
         console.print(f"[green]✓[/green] attestation [bold]{file.name}[/bold] is valid")
@@ -257,6 +314,9 @@ def verify(file: Path, trusted_key: tuple[str, ...], trusted_keys_file: Path | N
     console.print(f"  trace count  : {attestation.trace_count}")
     console.print(f"  Merkle root  : {attestation.merkle_root}")
     console.print(f"  signed by    : {attestation.issuer_pubkey_fingerprint}")
+    console.print(f"  issuer pinned: {'yes' if pinned is not None else 'no'}")
+    console.print(f"  traces check : {merkle_line}")
+    console.print(f"  on-chain     : {anchor_line}")
     for m in attestation.metrics:
         agreement = f"κ={m.judge_agreement:.2f}" if m.judge_agreement is not None else "n/a"
         console.print(
@@ -264,6 +324,77 @@ def verify(file: Path, trusted_key: tuple[str, ...], trusted_keys_file: Path | N
             f"[CI {m.ci_low:.2%} – {m.ci_high:.2%}] "
             f"n={m.n}  {agreement}"
         )
+
+
+def _load_traces(path: Path) -> list[Trace]:
+    """Read traces from a JSON array or JSONL file."""
+    text = path.read_text().strip()
+    if not text:
+        return []
+    if text.startswith("["):
+        rows = json.loads(text)
+    else:
+        rows = [json.loads(line) for line in text.splitlines() if line.strip()]
+    return [Trace.model_validate(r) for r in rows]
+
+
+def _check_anchor(attestation: Attestation, rpc_url: str) -> tuple[str | None, str]:
+    """Look the attestation up on-chain. Returns ``(fatal_issue, status_line)``."""
+    from vidimus.audit.anchor import OnchainAnchorer
+
+    claimed = attestation.onchain_anchor
+    assert claimed is not None
+    try:
+        anchorer = OnchainAnchorer(rpc_url=rpc_url, contract_address=claimed.contract_address)
+    except ImportError as e:
+        return f"cannot check anchor: {e}", "not checked"
+    except ConnectionError as e:
+        return f"cannot check anchor: {e}", "not checked"
+
+    # The anchored hash was computed before the anchor reference existed.
+    event = anchorer.verify_anchor(attestation.model_copy(update={"onchain_anchor": None}))
+    if event is None:
+        return "on-chain anchor not found for this attestation", "NOT FOUND"
+
+    def norm(h: str) -> str:
+        return h.lower().removeprefix("0x")
+
+    if (
+        event.block_number != claimed.block_number
+        or norm(event.tx_hash) != norm(claimed.tx_hash)
+        or event.chain_id != claimed.chain_id
+    ):
+        return (
+            "on-chain anchor found but its block/tx/chain differ from the ones "
+            "claimed in the report",
+            "MISMATCH",
+        )
+    return None, f"anchor verified at block {event.block_number:,} (tx {claimed.tx_hash})"
+
+
+@cli.command()
+@click.option(
+    "--against",
+    "attestation_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Attestation whose window (workspace + period) selects the traces.",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(dir_okay=False, writable=True, path_type=Path),
+    default=Path("traces.jsonl"),
+    help="Output JSONL file.",
+)
+def export(attestation_path: Path, output: Path) -> None:
+    """Export the traces covered by an attestation (input for `verify --traces`)."""
+    att = Attestation.model_validate_json(attestation_path.read_text())
+    traces = get_config().store.list_traces(
+        workspace=att.workspace, start=att.period_start, end=att.period_end
+    )
+    output.write_text("".join(t.model_dump_json() + "\n" for t in traces))
+    console.print(f"[green]✓[/green] {len(traces)} traces written to [bold]{output}[/bold]")
 
 
 @cli.command()

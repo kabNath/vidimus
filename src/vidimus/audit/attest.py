@@ -10,7 +10,7 @@ pin the issuer with ``trusted_keys`` for identity assurance.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from vidimus.audit.canonical import canonicalize
@@ -257,6 +257,36 @@ def verify(
             )
 
     return len(issues) == 0, issues, warnings
+
+
+def verify_traces(attestation: Attestation, traces: Iterable[Trace]) -> list[str]:
+    """Recompute the Merkle root over ``traces`` and compare it to the signed root.
+
+    ``traces`` must be exactly the traces of the attested window, in any
+    order (leaves are ordered by ``trace_id``, as ``attest`` does).
+
+    Returns:
+        A list of fatal issues; empty iff the recomputed root and the trace
+        count both match the attestation.
+    """
+    ordered = sorted(traces, key=lambda t: t.trace_id)
+    issues: list[str] = []
+    ids = [t.trace_id for t in ordered]
+    if len(set(ids)) != len(ids):
+        issues.append("duplicate trace_id in provided traces")
+    if len(ordered) != attestation.trace_count:
+        issues.append(
+            f"trace count mismatch: attestation signs {attestation.trace_count}, "
+            f"{len(ordered)} provided"
+        )
+    if not ordered:
+        return issues or ["no traces provided"]
+    root = MerkleTree([leaf_bytes(t) for t in ordered]).root_hex
+    if root != attestation.merkle_root:
+        issues.append(
+            f"Merkle root mismatch: recomputed {root}, attestation signs {attestation.merkle_root}"
+        )
+    return issues
 
 
 # --- Helpers ----------------------------------------------------------

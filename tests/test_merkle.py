@@ -177,7 +177,7 @@ class TestVerifyInclusionStrictness:
         tree = MerkleTree([b"a", b"b", b"c", b"d"])
         proof = tree.proof(1)
         assert not verify_inclusion(replace(proof, path=proof.path[:-1]), tree.root)
-        assert not verify_inclusion(replace(proof, path=proof.path + [bytes(32)]), tree.root)
+        assert not verify_inclusion(replace(proof, path=[*proof.path, bytes(32)]), tree.root)
 
     def test_wrong_tree_size_rejected(self) -> None:
         from dataclasses import replace
