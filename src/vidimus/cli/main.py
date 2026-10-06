@@ -28,7 +28,13 @@ from vidimus.audit.attest import leaf_bytes, verify_traces
 from vidimus.audit.attest import verify as do_verify
 from vidimus.audit.keys import generate_keypair, load_keypair, save_keypair
 from vidimus.audit.schemas import Attestation, Trace
-from vidimus.config import get_config
+from vidimus.config import (
+    default_home_dir,
+    get_config,
+    init_from_saved_settings,
+    is_initialized,
+    save_settings,
+)
 from vidimus.config import init as init_config
 
 console = Console(soft_wrap=True)
@@ -36,15 +42,34 @@ console = Console(soft_wrap=True)
 
 @click.group()
 @click.version_option(__version__, prog_name="vidimus")
-def cli() -> None:
+@click.pass_context
+def cli(ctx: click.Context) -> None:
     """Vidimus — the trust layer for agentic AI."""
+    # A fresh terminal has no in-process config: pick up the workspace saved by
+    # `vidimus init` (or $VIDIMUS_WORKSPACE) and open its persistent store.
+    if ctx.invoked_subcommand not in ("init", "version") and not is_initialized():
+        try:
+            init_from_saved_settings()
+        except Exception as e:  # e.g. DuckDB file locked by a running application
+            raise click.ClickException(f"cannot open the trace store: {e}") from e
 
 
 @cli.command()
 @click.option("--workspace", default="default", help="Workspace name.")
-def init(workspace: str) -> None:
-    """Initialize Vidimus configuration and generate a keypair."""
-    config = init_config(workspace=workspace)
+@click.option("--reset", is_flag=True, help="Delete all stored traces of this workspace.")
+@click.option("--yes", is_flag=True, help="Do not ask for confirmation with --reset.")
+def init(workspace: str, reset: bool, yes: bool) -> None:
+    """Initialize Vidimus configuration and generate a keypair.
+
+    Existing traces are kept; pass --reset to wipe them.
+    """
+    if reset and not yes:
+        click.confirm(f"Delete ALL stored traces of workspace '{workspace}'?", abort=True)
+    config = init_config(workspace=workspace, home_dir=default_home_dir())
+    save_settings(config.home_dir, workspace)
+    if reset:
+        config.store.clear()
+        console.print(f"[yellow]![/yellow] traces of workspace '{workspace}' deleted")
     keys_dir = config.home_dir / "keys"
     keys_dir.mkdir(parents=True, exist_ok=True)
 
