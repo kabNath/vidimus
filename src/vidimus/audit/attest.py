@@ -20,6 +20,7 @@ from vidimus.audit.merkle import MerkleTree
 from vidimus.audit.schemas import (
     Attestation,
     CalibratedMetric,
+    Trace,
 )
 from vidimus.audit.signing import sign_hex, verify_hex
 from vidimus.audit.uncertainty import (
@@ -28,6 +29,17 @@ from vidimus.audit.uncertainty import (
     fleiss_kappa,
 )
 from vidimus.config import get_config
+
+
+def leaf_bytes(trace: Trace) -> bytes:
+    """Canonical bytes of a trace as committed in the Merkle tree.
+
+    The single source of truth for leaf construction: ``attest``, ``prove``
+    and any verifier must build leaves with this function. ``MerkleTree``
+    applies the RFC 6962 leaf hash (``SHA-256(0x00 || data)``) itself, so
+    the data passed in must NOT be pre-hashed.
+    """
+    return canonicalize(trace.model_dump(mode="json"))
 
 
 def attest(
@@ -84,7 +96,7 @@ def attest(
         )
 
     # Step 2: build Merkle tree over canonical-JSON traces.
-    leaves = [canonicalize(t.model_dump(mode="json")) for t in traces]
+    leaves = [leaf_bytes(t) for t in traces]
     tree = MerkleTree(leaves)
 
     # Step 3: instantiate judges.

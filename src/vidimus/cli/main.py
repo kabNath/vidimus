@@ -23,6 +23,7 @@ from rich.table import Table
 
 from vidimus import __version__
 from vidimus.audit.attest import attest as do_attest
+from vidimus.audit.attest import leaf_bytes
 from vidimus.audit.attest import verify as do_verify
 from vidimus.audit.keys import generate_keypair, load_keypair, save_keypair
 from vidimus.audit.schemas import Attestation
@@ -308,11 +309,7 @@ def prove(trace_id: str, attestation_path: str) -> None:
         sys.exit(1)
 
     # Rebuild Merkle tree to extract proof
-    import hashlib
-
-    from vidimus.audit.canonical import canonicalize
-
-    leaves = [hashlib.sha256(canonicalize(t.model_dump(mode="json"))).digest() for t in traces]
+    leaves = [leaf_bytes(t) for t in traces]
     tree = MerkleTree(leaves)
     proof = tree.proof(target_index)
 
