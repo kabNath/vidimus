@@ -1,0 +1,107 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vidimus"
+version = "0.1.0a1"
+description = "The trust layer for agentic AI — tamper-evident traces, calibrated uncertainty, cryptographic attestations"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Wendenda Nathanael Kaboré" },
+]
+keywords = ["llm", "observability", "ai", "agents", "evaluation", "attestation", "merkle", "ed25519"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "pydantic>=2.5",
+    "cryptography>=42.0",
+    "click>=8.1",
+    "rich>=13.0",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+duckdb = ["duckdb>=0.10"]
+otel = ["opentelemetry-sdk>=1.20", "fastapi>=0.110", "uvicorn>=0.29"]
+onchain = ["web3>=6.0"]
+openai = ["openai>=1.40"]
+anthropic = ["anthropic>=0.30"]
+ollama = ["requests>=2.31"]
+rag = ["sentence-transformers>=2.7", "faiss-cpu>=1.8"]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "hypothesis>=6.90",
+    "ruff>=0.4",
+    "mypy>=1.8",
+    "pre-commit>=3.5",
+    # Real LLM judge backends, available for testing without needing extras
+    "openai>=1.40",
+    "anthropic>=0.30",
+    "requests>=2.31",
+    # All optional backends installed so developers can test the full surface
+    "duckdb>=0.10",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "httpx>=0.27",
+    "web3>=6.0",
+]
+all = ["vidimus[duckdb,otel,onchain,openai,anthropic,ollama,rag]"]
+
+[project.urls]
+Homepage = "https://github.com/kabNath/vidimus"
+Documentation = "https://github.com/kabNath/vidimus#readme"
+Repository = "https://github.com/kabNath/vidimus"
+Issues = "https://github.com/kabNath/vidimus/issues"
+Changelog = "https://github.com/kabNath/vidimus/blob/main/CHANGELOG.md"
+
+[project.scripts]
+vidimus = "vidimus.cli.main:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vidimus"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM", "RUF"]
+ignore = [
+    "E501",   # handled by formatter
+    "RUF001", # ambiguous unicode chars in strings (we use Greek letters intentionally: α, β, κ)
+    "RUF002", # ambiguous unicode chars in docstrings (same)
+    "RUF003", # ambiguous unicode chars in comments (same)
+    "SIM117", # nested `with` is sometimes clearer than the combined form
+    "SIM108", # not every if/else benefits from being a ternary
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests use pytest.importorskip() which requires conditional imports after a function call.
+# Tests also use MagicMock variables named after the class they mock (Pythonic Mock convention).
+"tests/*.py" = ["E402", "N806", "N802"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true

@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation builds
+docs/_build/
+site/
+
+# Tests
+tests/
+.hypothesis/
+
+# Examples (not needed at runtime)
+examples/
+
+# Demo assets (large)
+demo/*.gif
+demo/*.mp4
+demo/*.cast
+
+# Secrets — never copy these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+attestations/

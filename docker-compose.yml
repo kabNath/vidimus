@@ -1,0 +1,39 @@
+name: vidimus
+
+services:
+  vidimus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vidimus:latest
+    container_name: vidimus
+    restart: unless-stopped
+
+    environment:
+      VIDIMUS_WORKSPACE: ${VIDIMUS_WORKSPACE:-default}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+    volumes:
+      - vidimus_keys:/home/vidimus/.vidimus/keys
+      - vidimus_data:/home/vidimus/.vidimus/data
+      - ./attestations:/output
+
+    # Override the default CMD to run something useful, e.g.:
+    #   docker compose run --rm vidimus version
+    #   docker compose run --rm vidimus keys generate
+    #   docker compose run --rm vidimus attest --since 24h --output /output/report.json
+    command: ["version"]
+
+    healthcheck:
+      test: ["CMD", "vidimus", "version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 3s
+
+volumes:
+  vidimus_keys:
+    driver: local
+  vidimus_data:
+    driver: local
