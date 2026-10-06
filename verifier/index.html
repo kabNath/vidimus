@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>Vidimus attestation verifier</title>
+<style>
+  :root { --bg:#fafaf9; --fg:#1c1917; --muted:#78716c; --card:#fff; --line:#e7e5e4;
+          --pass:#15803d; --fail:#b91c1c; --warn:#a16207; --nc:#57534e; --accent:#2563eb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0c0a09; --fg:#f5f5f4; --muted:#a8a29e; --card:#1c1917; --line:#292524;
+            --pass:#4ade80; --fail:#f87171; --warn:#facc15; --nc:#a8a29e; --accent:#60a5fa; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, sans-serif; }
+  main { max-width: 820px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; } p.lead { color: var(--muted); margin: 0 0 20px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  h2 { font-size: .95rem; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  label { display:block; font-weight:600; margin: 0 0 6px; }
+  textarea, input[type=text] { width:100%; font: 13px/1.4 ui-monospace, monospace; background:var(--bg); color:var(--fg);
+    border:1px solid var(--line); border-radius:6px; padding:8px; }
+  textarea { min-height: 84px; resize: vertical; }
+  button { font:inherit; padding:8px 14px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; }
+  button.secondary { background:transparent; color:var(--accent); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+  #banner { padding:12px 14px; border-radius:8px; font-weight:600; margin-bottom:14px; border:1px solid var(--line); }
+  #banner.pass { color: var(--pass); border-color: var(--pass); } #banner.fail { color: var(--fail); border-color: var(--fail); }
+  #banner.warn { color: var(--warn); border-color: var(--warn); }
+  ul#checks { list-style:none; padding:0; margin:0; }
+  ul#checks li { display:grid; grid-template-columns: 110px 1fr; gap: 4px 12px; padding:8px 0; border-top:1px solid var(--line); }
+  ul#checks li:first-child { border-top:0; }
+  .tag { font-weight:700; font-size: 12px; text-transform: uppercase; letter-spacing:.04em; padding-top:2px; }
+  .pass .tag { color:var(--pass); } .fail .tag { color:var(--fail); } .warn .tag { color:var(--warn); } .not_checked .tag { color:var(--nc); }
+  .detail { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; } .name { font-weight:600; }
+  code { font: 12.5px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Vidimus attestation verifier</h1>
+  <p class="lead">Runs entirely in this page: no server, no network, nothing leaves your browser. It reports what was
+  checked and, just as clearly, what was <b>not</b> checked.</p>
+
+  <section>
+    <h2>1 · Attestation</h2>
+    <label for="file">Load an attestation JSON file</label>
+    <input id="file" type="file" accept=".json,application/json">
+    <p class="hint">or paste it:</p>
+    <textarea id="json" spellcheck="false" placeholder='{"version":"vidimus.attestation.v1", ...}'></textarea>
+  </section>
+
+  <section>
+    <h2>2 · Pinned issuer key (recommended)</h2>
+    <label for="pins">Trusted issuer key(s): fingerprint or hex public key, one per line</label>
+    <textarea id="pins" spellcheck="false" placeholder="paste the fingerprint you obtained from the issuer through a channel you trust"></textarea>
+    <p class="hint">Without a pinned key, a valid signature only proves the file was not altered after signing —
+    anyone can sign a self-consistent report with their own key. Get the fingerprint from the issuer out of band.</p>
+    <div class="row"><button id="go">Verify</button><button id="clear" class="secondary">Clear</button>
+    <span class="hint" id="engine"></span></div>
+  </section>
+
+  <section id="result" hidden>
+    <h2>Result</h2>
+    <div id="banner"></div>
+    <ul id="checks"></ul>
+  </section>
+</main>
+
+<script id="core">
+/* Vidimus verifier core — pure functions, no DOM. Mirrors vidimus.audit.canonical / attest.verify.
+   Everything the signature covers is rebuilt here from the JSON you provide. */
+const VidimusVerifier = (() => {
+  "use strict";
+  const enc = new TextEncoder();
+  const hex = (u8) => Array.from(u8, (b) => b.toString(16).padStart(2, "0")).join("");
+  const unhex = (s) => {
+    if (typeof s !== "string" || s.length % 2 || /[^0-9a-fA-F]/.test(s)) throw new Error("not valid hex");
+    const out = new Uint8Array(s.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(s.slice(2 * i, 2 * i + 2), 16);
+    return out;
+  };
+
+  // ---- canonical JSON (same rules as vidimus.audit.canonical) -------------------------------
+  // Python-compatible float formatting: shortest round-trip digits; fixed notation for
+  // 1e-4 <= |x| < 1e16, otherwise d.ddde+XX with at least two exponent digits.
+  function fmtNumber(n) {
+    if (!Number.isFinite(n)) throw new Error("NaN/Infinity cannot be canonicalised");
+    if (Number.isInteger(n) && Math.abs(n) < 1e16) return String(n === 0 ? 0 : n);
+    const [m, e] = n.toExponential().split("e");           // shortest digits, e.g. "1.5", "-5"
+    const exp = parseInt(e, 10);
+    if (exp < -4 || exp >= 16) {
+      const sign = exp < 0 ? "-" : "+";
+      return m + "e" + sign + String(Math.abs(exp)).padStart(2, "0");
+    }
+    const neg = m.startsWith("-"); const digits = m.replace("-", "").replace(".", "");
+    let s;
+    if (exp >= 0) s = digits.length <= exp + 1 ? digits.padEnd(exp + 1, "0") : digits.slice(0, exp + 1) + "." + digits.slice(exp + 1);
+    else s = "0." + "0".repeat(-exp - 1) + digits;
+    return (neg ? "-" : "") + s;
+  }
+  function fmtString(s) {
+    let out = '"';
+    for (const ch of s) {
+      const cp = ch.codePointAt(0);
+      if (ch === '"') out += '\\"'; else if (ch === "\\") out += "\\\\";
+      else if (ch === "\b") out += "\\b"; else if (ch === "\t") out += "\\t"; else if (ch === "\n") out += "\\n";
+      else if (ch === "\f") out += "\\f"; else if (ch === "\r") out += "\\r";
+      else if (cp < 0x20) out += "\\u" + cp.toString(16).padStart(4, "0");
+      else out += ch;
+    }
+    return out + '"';
+  }
+  function canonicalize(v) {
+    if (v === null) return "null";
+    if (v === true) return "true"; if (v === false) return "false";
+    if (typeof v === "string") return fmtString(v);
+    if (typeof v === "number") return fmtNumber(v);
+    if (Array.isArray(v)) return "[" + v.map(canonicalize).join(",") + "]";
+    if (typeof v === "object") {
+      const keys = Object.keys(v).sort((a, b) => { const x = [...a], y = [...b];   // by code point, like Python
+        for (let i = 0; i < Math.min(x.length, y.length); i++) { const d = x[i].codePointAt(0) - y[i].codePointAt(0); if (d) return d; }
+        return x.length - y.length; });
+      return "{" + keys.map((k) => fmtString(k) + ":" + canonicalize(v[k])).join(",") + "}";
+    }
+    throw new Error("unsupported JSON value");
+  }
+
+  // ---- Ed25519: embedded verifier (RFC 8032, BigInt) — used when WebCrypto lacks Ed25519 -------
+  const P = (1n << 255n) - 19n, L = (1n << 252n) + 27742317777372353535851937790883648493n;
+  const mod = (a, m = P) => ((a % m) + m) % m;
+  const pow = (b, e, m = P) => { let r = 1n; b = mod(b, m); while (e > 0n) { if (e & 1n) r = (r * b) % m; b = (b * b) % m; e >>= 1n; } return r; };
+  const inv = (a) => pow(a, P - 2n);
+  const D = mod(-121665n * inv(121666n));
+  const I = pow(2n, (P - 1n) / 4n);
+  const B = (() => { const y = mod(4n * inv(5n)); return [recoverX(y, 0), y, 1n, mod(recoverX(y, 0) * y)]; })();
+  function recoverX(y, sign) {
+    const x2 = mod((y * y - 1n) * inv(D * y * y + 1n));
+    let x = pow(x2, (P + 3n) / 8n);
+    if (mod(x * x - x2) !== 0n) x = mod(x * I);
+    if (mod(x * x - x2) !== 0n) throw new Error("point not on curve");
+    if ((x & 1n) !== BigInt(sign)) x = mod(-x);
+    return x;
+  }
+  const add = (p, q) => { const [x1, y1, z1, t1] = p, [x2, y2, z2, t2] = q;
+    const a = mod((y1 - x1) * (y2 - x2)), b = mod((y1 + x1) * (y2 + x2)), c = mod(2n * D * t1 * t2), d = mod(2n * z1 * z2);
+    const e = b - a, f = d - c, g = d + c, h = b + a; return [mod(e * f), mod(g * h), mod(f * g), mod(e * h)]; };
+  const mul = (s, p) => { let r = [0n, 1n, 1n, 0n], q = p; while (s > 0n) { if (s & 1n) r = add(r, q); q = add(q, q); s >>= 1n; } return r; };
+  const leInt = (u8) => { let n = 0n; for (let i = u8.length - 1; i >= 0; i--) n = (n << 8n) | BigInt(u8[i]); return n; };
+  function encodePoint(p) { const zi = inv(p[2]), x = mod(p[0] * zi), y = mod(p[1] * zi); const out = new Uint8Array(32);
+    let v = y | ((x & 1n) << 255n); for (let i = 0; i < 32; i++) { out[i] = Number(v & 0xffn); v >>= 8n; } return out; }
+  function decodePoint(u8) { let y = leInt(u8); const sign = Number(y >> 255n); y &= (1n << 255n) - 1n;
+    if (y >= P) throw new Error("bad point"); const x = recoverX(y, sign); return [x, y, 1n, mod(x * y)]; }
+  async function sha512(crypto, data) { return new Uint8Array(await crypto.subtle.digest("SHA-512", data)); }
+  async function verifyEmbedded(crypto, pk, sig, msg) {
+    if (pk.length !== 32 || sig.length !== 64) return false;
+    try {
+      const A = decodePoint(pk), R = decodePoint(sig.slice(0, 32)), S = leInt(sig.slice(32));
+      if (S >= L) return false;
+      const buf = new Uint8Array(64 + msg.length); buf.set(sig.slice(0, 32)); buf.set(pk, 32); buf.set(msg, 64);
+      const h = leInt(await sha512(crypto, buf)) % L;
+      const lhs = encodePoint(mul(S, B)), rhs = encodePoint(add(R, mul(h, A)));
+      return hex(lhs) === hex(rhs);
+    } catch { return false; }
+  }
+  async function verifyEd25519(crypto, pk, sig, msg, engine = "auto") {
+    if (engine !== "embedded") {
+      try {
+        const key = await crypto.subtle.importKey("raw", pk, { name: "Ed25519" }, false, ["verify"]);
+        return { ok: await crypto.subtle.verify({ name: "Ed25519" }, key, sig, msg), engine: "WebCrypto" };
+      } catch (e) { if (engine === "webcrypto") throw e; /* Ed25519 unsupported: fall through */ }
+    }
+    return { ok: await verifyEmbedded(crypto, pk, sig, msg), engine: "embedded (BigInt)" };
+  }
+
+  // ---- the attestation checks ---------------------------------------------------------------
+  const PASS = "pass", FAIL = "fail", WARN = "warn", NC = "not_checked";
+  const NOT_PINNED = "issuer key not pinned: signature proves integrity, not identity";
+
+  async function verifyAttestation(crypto, att, opts = {}) {
+    const checks = []; const add = (id, label, status, detail) => checks.push({ id, label, status, detail });
+    const trusted = opts.trustedKeys && opts.trustedKeys.length ? opts.trustedKeys.map((k) => k.trim().toLowerCase()).filter(Boolean) : null;
+    let engine = null, payloadHash = null;
+
+    // format
+    const need = ["version", "workspace", "merkle_root", "trace_count", "metrics", "issuer_pubkey", "issuer_pubkey_fingerprint", "signature"];
+    const missing = need.filter((k) => !(k in att));
+    if (att.version !== "vidimus.attestation.v1" || missing.length) {
+      add("format", "Format", FAIL, att.version !== "vidimus.attestation.v1" ? `unsupported version ${JSON.stringify(att.version)}` : `missing fields: ${missing.join(", ")}`);
+      return { checks, ok: false, engine, payloadHash, pinned: false };
+    }
+    add("format", "Format", PASS, "vidimus.attestation.v1");
+
+    // key / fingerprint
+    let pk, fp;
+    try { pk = unhex(att.issuer_pubkey); if (pk.length !== 32) throw new Error("public key must be 32 bytes"); }
+    catch (e) { add("key", "Issuer key", FAIL, "invalid public key: " + e.message); return { checks, ok: false, engine, payloadHash, pinned: false }; }
+    fp = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", pk)));
+    add("fingerprint", "Fingerprint matches key", fp === att.issuer_pubkey_fingerprint ? PASS : FAIL,
+      fp === att.issuer_pubkey_fingerprint ? fp : `embedded ${att.issuer_pubkey_fingerprint} ≠ derived ${fp}`);
+
+    // canonical payload: signature blanked; legacy Merkle scheme is left out (signed before the field existed)
+    const signed = { ...att, signature: "" };
+    const legacy = !("merkle_scheme" in att) || att.merkle_scheme === "legacy-duplicate";
+    if (legacy) delete signed.merkle_scheme;
+    const payload = enc.encode(canonicalize(signed));
+    payloadHash = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", payload)));
+    add("canonical", "Canonical payload (RFC 8785 rules)", PASS, `${payload.length} bytes, SHA-256 ${payloadHash}`);
+
+    // signature
+    let sigOk = false;
+    try {
+      const r = await verifyEd25519(crypto, pk, unhex(att.signature), payload, opts.engine || "auto");
+      sigOk = r.ok; engine = r.engine;
+    } catch (e) { add("signature", "Ed25519 signature", FAIL, "could not verify: " + e.message); }
+    if (engine) add("signature", "Ed25519 signature", sigOk ? PASS : FAIL,
+      sigOk ? `valid for the embedded key (engine: ${engine})` : "does NOT verify: the content was altered after signing, or this is not the signer's report");
+
+    // pinning
+    let pinned = false;
+    if (trusted === null) add("pinned", "Issuer pinned", NC, NOT_PINNED);
+    else if (trusted.includes(fp) || trusted.includes(att.issuer_pubkey.toLowerCase())) { pinned = true; add("pinned", "Issuer pinned", PASS, "issuer key matches a trusted key you provided"); }
+    else add("pinned", "Issuer pinned", FAIL, `issuer ${fp} is not among the trusted keys you provided`);
+
+    // metrics
+    const bad = (att.metrics || []).filter((m) => !(m.ci_low <= m.point_estimate && m.point_estimate <= m.ci_high));
+    add("metrics", "Metric intervals well-formed", bad.length ? FAIL : PASS,
+      bad.length ? bad.map((m) => `'${m.name}': ${m.point_estimate} outside [${m.ci_low}, ${m.ci_high}]`).join("; ") : `${(att.metrics || []).length} metric(s): low ≤ estimate ≤ high`);
+    const low = (att.metrics || []).filter((m) => m.judge_agreement != null && m.judge_agreement < 0.4);
+    if (low.length) add("agreement", "Judge agreement", WARN, low.map((m) => `'${m.name}' κ=${m.judge_agreement.toFixed(2)}`).join("; ") + " — interpret with extra caution");
+
+    // what this page cannot do
+    if (legacy) add("scheme", "Merkle scheme", WARN, "legacy-duplicate: the root was built by duplicating the last node, so different trace lists can share a root");
+    add("merkle", "Merkle root vs. traces", NC, `root ${att.merkle_root} (${att.trace_count} traces) is signed but was NOT recomputed — this page does not receive the traces. Use: vidimus verify --traces`);
+    add("anchor", "On-chain anchor", NC, att.onchain_anchor ? "the report claims an anchor (" + att.onchain_anchor.chain + ", block " + att.onchain_anchor.block_number + "); NOT checked — needs a chain RPC. Use: vidimus verify --check-anchor" : "none in report");
+
+    const ok = !checks.some((c) => c.status === FAIL);
+    return { checks, ok, engine, payloadHash, pinned };
+  }
+
+  return { canonicalize, verifyAttestation, verifyEd25519, verifyEmbedded, fmtNumber, hex, unhex, NOT_PINNED };
+})();
+</script>
+
+<script id="ui">
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const ICON = { pass: "✓ passed", fail: "✗ failed", warn: "! warning", not_checked: "– not checked" };
+  $("file").addEventListener("change", async (e) => { const f = e.target.files[0]; if (f) $("json").value = await f.text(); });
+  $("clear").addEventListener("click", () => { $("json").value = ""; $("pins").value = ""; $("file").value = ""; $("result").hidden = true; });
+  $("go").addEventListener("click", async () => {
+    const out = $("result"); out.hidden = false; $("checks").textContent = "";
+    if (!(window.crypto && window.crypto.subtle)) return banner("fail",
+      "This browser context has no WebCrypto (crypto.subtle). Open the file locally (file://), via http://localhost or over HTTPS.");
+    let att;
+    try { att = JSON.parse($("json").value); } catch (e) { return banner("fail", "Not valid JSON: " + e.message); }
+    const pins = $("pins").value.split(/\s+/).filter(Boolean);
+    let r;
+    try { r = await VidimusVerifier.verifyAttestation(window.crypto, att, { trustedKeys: pins }); }
+    catch (e) { return banner("fail", "Verification error: " + e.message); }
+    const sig = r.checks.find((c) => c.id === "signature");
+    if (!r.ok) banner("fail", "FAILED — do not trust this attestation (see failed checks).");
+    else if (!r.pinned) banner("warn", "Integrity verified only. The issuer's identity was NOT verified (no pinned key).");
+    else banner("pass", "Integrity and issuer verified. The Merkle root and the on-chain anchor were not checked here.");
+    for (const c of r.checks) {
+      const li = document.createElement("li"); li.className = c.status;
+      const tag = document.createElement("div"); tag.className = "tag"; tag.textContent = ICON[c.status];
+      const body = document.createElement("div");
+      const n = document.createElement("div"); n.className = "name"; n.textContent = c.label;
+      const d = document.createElement("div"); d.className = "detail"; d.textContent = c.detail;
+      body.append(n, d); li.append(tag, body); $("checks").append(li);
+    }
+    $("engine").textContent = r.engine ? "Ed25519 engine: " + r.engine : "";
+    function banner(kind, text) { const b = $("banner"); b.className = kind; b.textContent = text; }
+  });
+})();
+</script>
+</body>
+</html>

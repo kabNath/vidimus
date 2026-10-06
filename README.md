@@ -83,6 +83,8 @@ vidimus verify report.json --traces traces.jsonl --trusted-key c1410284d7b9c5b29
   hallucination            55.00% [CI 40.00% – 70.00%] n=40  κ=0.03
 ```
 
+A single-file **browser verifier** ([`verifier/index.html`](verifier/index.html), no backend, no CDN) checks signature, key pinning and interval sanity of an attestation and lists what it did *not* check.
+
 This is the real output of a run on 40 traces scored by three stub judges (values, timestamps and keys differ on every run; the low κ is expected from stub judges). `verify` only reports what it checked:
 
 | Line | When it is checked |
