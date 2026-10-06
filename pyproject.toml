@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vidimus"
-version = "0.1.0a1"
+version = "0.1.0a3"
 description = "The trust layer for agentic AI — tamper-evident traces, calibrated uncertainty, cryptographic attestations"
 readme = "README.md"
 requires-python = ">=3.10"

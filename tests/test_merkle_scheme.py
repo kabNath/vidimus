@@ -76,7 +76,7 @@ def _legacy_attestation(n: int):  # type: ignore[no-untyped-def]
 
 
 def test_legacy_attestation_without_field_loads_as_legacy_and_verifies_with_warning() -> None:
-    raw, traces, _ = _legacy_attestation(5)
+    raw, _traces, _ = _legacy_attestation(5)
     assert "merkle_scheme" not in raw
     att = Attestation.model_validate(raw)
     assert att.merkle_scheme == "legacy-duplicate"
