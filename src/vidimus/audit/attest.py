@@ -3,9 +3,9 @@
 This module is the user-visible glue layer over the cryptographic and
 statistical primitives. ``attest()`` produces a signed Attestation;
 ``verify()`` checks one offline given only the file and the issuer's
-public key (which is also embedded in the attestation, so verification
-is fully self-contained for casual checks; a separate ``keys.txt`` lookup
-is recommended for higher-assurance verification).
+public key. The key is also embedded in the attestation, so without
+``trusted_keys`` a successful check proves integrity only, not identity;
+pin the issuer with ``trusted_keys`` for identity assurance.
 """
 
 from __future__ import annotations
@@ -154,14 +154,33 @@ def attest(
     return signed
 
 
-def verify(attestation: Attestation) -> tuple[bool, list[str], list[str]]:
+NOT_PINNED_WARNING = "issuer key not pinned: signature proves integrity, not identity"
+
+
+def verify(
+    attestation: Attestation,
+    trusted_keys: Sequence[str] | None = None,
+) -> tuple[bool, list[str], list[str]]:
     """Verify an attestation cryptographically and statistically.
 
     Checks performed:
       1. The embedded public key matches the embedded fingerprint.   (fatal)
       2. Ed25519 signature is valid over canonical JSON.              (fatal)
       3. Metric CIs are well-formed (low <= point <= high).           (fatal)
-      4. Inter-judge agreement >= 0.4 on LLM-judge metrics.           (warning)
+      4. Issuer is in ``trusted_keys``, when provided.                (fatal)
+      5. Inter-judge agreement >= 0.4 on LLM-judge metrics.           (warning)
+
+    The attestation embeds its own public key, so without ``trusted_keys``
+    a valid signature only proves *integrity* (the content was not altered
+    after signing), not *identity* (anyone can sign a self-consistent
+    report with their own key). Pass ``trusted_keys`` to pin the issuer.
+
+    Args:
+        attestation: The attestation to verify.
+        trusted_keys: Accepted issuers, as key fingerprints (SHA-256 of the
+            raw public key) or raw public keys, hex-encoded. If provided
+            (even if empty), the issuer must match one of them or
+            verification fails. If ``None``, a warning is returned.
 
     The distinction matters: a valid signature with low judge agreement
     means the attestation is *cryptographically authentic* but its metric
@@ -206,7 +225,18 @@ def verify(attestation: Attestation) -> tuple[bool, list[str], list[str]]:
                 f"CI [{m.ci_low}, {m.ci_high}]"
             )
 
-    # 4. Inter-judge agreement (non-fatal).
+    # 4. Issuer pinning.
+    if trusted_keys is None:
+        warnings.append(NOT_PINNED_WARNING)
+    else:
+        accepted = {k.strip().lower() for k in trusted_keys}
+        if derived_fp not in accepted and attestation.issuer_pubkey.lower() not in accepted:
+            issues.append(
+                f"issuer key {derived_fp} is not in trusted keys; "
+                f"signature may be valid but the signer is not a pinned issuer"
+            )
+
+    # 5. Inter-judge agreement (non-fatal).
     for m in attestation.metrics:
         if m.judge_agreement is not None and m.judge_agreement < 0.4:
             warnings.append(

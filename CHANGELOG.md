@@ -4,6 +4,14 @@ All notable changes to Vidimus will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0a3] — Unreleased
+
+### Added
+- `verify(attestation, trusted_keys=...)` and `vidimus verify --trusted-key / --trusted-keys-file`: pin the issuer key (fingerprint or hex public key). A pinned verification fails if the issuer is not listed.
+
+### Changed
+- `verify()` without `trusted_keys` now returns the warning "issuer key not pinned: signature proves integrity, not identity".
+
 ## [0.1.0a2] — 2026-05-17
 
 Implementation completeness milestone. Every component promised in the README is now backed by working code — no more stubs masquerading as features.

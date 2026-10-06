@@ -204,11 +204,36 @@ def attest(
 
 @cli.command()
 @click.argument("file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-def verify(file: Path) -> None:
-    """Verify an attestation file offline."""
+@click.option(
+    "--trusted-key",
+    "trusted_key",
+    multiple=True,
+    help="Pin the issuer: key fingerprint or hex public key (repeatable).",
+)
+@click.option(
+    "--trusted-keys-file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="File with one trusted fingerprint/public key per line ('#' starts a comment).",
+)
+def verify(file: Path, trusted_key: tuple[str, ...], trusted_keys_file: Path | None) -> None:
+    """Verify an attestation file offline.
+
+    Without --trusted-key/--trusted-keys-file the signature only proves
+    integrity, not who issued the report.
+    """
     data = json.loads(file.read_text())
     attestation = Attestation.model_validate(data)
-    ok, issues, warnings = do_verify(attestation)
+
+    pinned: list[str] | None = None
+    if trusted_key or trusted_keys_file:
+        pinned = list(trusted_key)
+        if trusted_keys_file:
+            for line in trusted_keys_file.read_text().splitlines():
+                line = line.split("#", 1)[0].strip()
+                if line:
+                    pinned.append(line)
+    ok, issues, warnings = do_verify(attestation, trusted_keys=pinned)
 
     if ok:
         console.print(f"[green]✓[/green] attestation [bold]{file.name}[/bold] is valid")
