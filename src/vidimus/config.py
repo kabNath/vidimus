@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -160,9 +161,7 @@ def init_from_saved_settings() -> VidimusConfig:
     """Initialize from ``$VIDIMUS_WORKSPACE`` / the settings written by ``vidimus init``."""
     home = default_home_dir()
     saved: dict[str, Any] = {}
-    try:
+    with contextlib.suppress(OSError, ValueError):
         saved = json.loads(settings_path(home).read_text())
-    except (OSError, ValueError):
-        pass
     workspace = os.environ.get("VIDIMUS_WORKSPACE") or saved.get("workspace") or "default"
     return init(workspace=workspace, judges=saved.get("judges"), home_dir=home)

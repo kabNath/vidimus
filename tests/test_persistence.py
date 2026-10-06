@@ -27,7 +27,10 @@ def _env(home: Path) -> dict[str, str]:
 def _cli(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "vidimus.cli.main", *args],
-        env=_env(home), capture_output=True, text=True, timeout=120,
+        env=_env(home),
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
 
 
@@ -57,7 +60,9 @@ def test_default_store_is_duckdb_file_in_workspace_dir(tmp_path: Path, monkeypat
 
 def test_memory_store_remains_available(tmp_path: Path) -> None:
     reset_config()
-    assert isinstance(vidimus.init(workspace="t", home_dir=tmp_path, store="memory").store, InMemoryStore)
+    assert isinstance(
+        vidimus.init(workspace="t", home_dir=tmp_path, store="memory").store, InMemoryStore
+    )
     assert isinstance(get_config().store, InMemoryStore)
     reset_config()
 

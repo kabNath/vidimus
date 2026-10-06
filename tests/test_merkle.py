@@ -145,7 +145,13 @@ class TestRfc6962Vectors:
         # RFC 6962 audit path lengths for an 8-leaf tree vs a 7-leaf tree.
         assert [len(MerkleTree(CT_LEAVES[:8]).proof(i).path) for i in range(8)] == [3] * 8
         assert [len(MerkleTree(CT_LEAVES[:7]).proof(i).path) for i in range(7)] == [
-            3, 3, 3, 3, 3, 3, 2,
+            3,
+            3,
+            3,
+            3,
+            3,
+            3,
+            2,
         ]
 
     def test_ct_inclusion_proof_known_path(self) -> None:
