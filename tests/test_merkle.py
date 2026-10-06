@@ -103,8 +103,9 @@ class TestRootStability:
 
 
 # --- RFC 6962 / Certificate Transparency reference vectors -------------------
-# Leaves and roots from the Certificate Transparency reference test suite
-# (the same inputs are used by the Go and C++ CT implementations).
+# Leaves and roots as used by the Certificate Transparency reference test suite.
+# Transcribed from memory; every root is confirmed by the naive RFC 6962
+# transcription in TestAgainstNaiveRfc6962 below (an unconfirmed one must be removed).
 
 CT_LEAVES = [
     b"",
@@ -191,3 +192,49 @@ class TestVerifyInclusionStrictness:
             tree = MerkleTree([f"x{i}".encode() for i in range(n)])
             for i in range(n):
                 assert verify_inclusion(tree.proof(i), tree.root), (n, i)
+
+
+# --- Cross-check against a naive, literal transcription of RFC 6962 §2.1 -----
+
+
+def _mth(d: list[bytes]) -> bytes:
+    """MTH(D[n]) exactly as written in RFC 6962 §2.1 (no caching, no cleverness)."""
+    n = len(d)
+    if n == 0:
+        return _h(b"")
+    if n == 1:
+        return _leaf(d[0])
+    k = 1
+    while k * 2 < n:  # largest power of two strictly less than n
+        k *= 2
+    return _node(_mth(d[:k]), _mth(d[k:]))
+
+
+def _path(m: int, d: list[bytes]) -> list[bytes]:
+    """PATH(m, D[n]) exactly as written in RFC 6962 §2.1.1."""
+    n = len(d)
+    if n == 1:
+        return []
+    k = 1
+    while k * 2 < n:
+        k *= 2
+    if m < k:
+        return [*_path(m, d[:k]), _mth(d[k:])]
+    return [*_path(m - k, d[k:]), _mth(d[:k])]
+
+
+class TestAgainstNaiveRfc6962:
+    def test_roots_and_proofs_for_all_sizes_1_to_200(self) -> None:
+        for n in range(1, 201):
+            data = [f"leaf-{n}-{i}".encode() for i in range(n)]
+            tree = MerkleTree(data)
+            assert tree.root == _mth(data), f"root differs at n={n}"
+            for i in range(n):
+                proof = tree.proof(i)
+                assert proof.path == _path(i, data), f"path differs at n={n}, i={i}"
+                assert verify_inclusion(proof, _mth(data)), f"verify failed at n={n}, i={i}"
+
+    def test_memorised_ct_vectors_agree_with_naive_mth(self) -> None:
+        # A vector that the naive transcription does not reproduce must be removed.
+        for n in range(1, 9):
+            assert _mth(CT_LEAVES[:n]).hex() == CT_ROOTS[n - 1], f"vector n={n} not confirmed"
