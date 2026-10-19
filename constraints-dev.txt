@@ -1,0 +1,9 @@
+# Upper bounds for the dev/CI toolchain. pyproject.toml only has lower bounds, so CI
+# resolved the newest mypy / anthropic / numpy / requests on every run and broke on
+# typing changes (see 0.1.0a3 "Fixed"). Use:  pip install -c constraints-dev.txt -e ".[dev]"
+# Raise a bound deliberately, together with the fix it needs.
+mypy>=1.8,<3
+ruff>=0.4,<1
+anthropic>=0.30,<2
+numpy>=1.24,<3
+requests>=2.31,<3

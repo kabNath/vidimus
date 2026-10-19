@@ -6,6 +6,11 @@ Vidimus is a trust stack for the agent lifecycle, shipped as three sequenced mod
 
 Tamper-evident traces, calibrated uncertainty, cryptographic attestations.
 
+### Open items (carried over)
+- Key registry: `vidimus-svc/trusted-keys.json` in spec-conformance-agentic is empty. Register a production signing key there (`key_id`, public key from `GET /pubkey`, `valid_from`), then re-sign `docs/preregistration.md` with it as a second attestation. The existing one uses a local development key that a pinned verifier rejects.
+- Strict RFC 8785 canonicalisation (ES6 number format, UTF-16 key order) behind a new canonicalisation version; see README "Known limitations".
+- Make CI tool versions reproducible (`constraints-dev.txt` bounds today; consider exact pins/lockfile).
+
 ### v0.1.x (current)
 - Core primitives: canonical JSON, Merkle trees, Ed25519, bootstrap CI
 - StubJudge for development; ABC for real judges

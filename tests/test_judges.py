@@ -182,6 +182,60 @@ class TestAnthropicJudge:
             assert judge.name.startswith("anthropic:")
 
 
+class TestAnthropicTemperatureFallback:
+    """The SDK no longer types ``temperature``; it travels via ``extra_body`` and is
+    dropped (once, without consuming a retry) if the model rejects it."""
+
+    @staticmethod
+    def _ok_response():
+        block = MagicMock()
+        block.text = json.dumps({"score": 0.6, "rationale": "ok"})
+        resp = MagicMock()
+        resp.content = [block]
+        return resp
+
+    def test_temperature_is_sent_in_extra_body(self):
+        with patch("anthropic.Anthropic") as MockAnthropic:
+            client = MagicMock()
+            client.messages.create.return_value = self._ok_response()
+            MockAnthropic.return_value = client
+            AnthropicJudge(api_key="fake-key").score(_make_trace(), "answer_quality")
+            kwargs = client.messages.create.call_args.kwargs
+            assert kwargs["extra_body"] == {"temperature": 0.0}
+
+    def test_rejected_temperature_is_dropped_without_using_a_retry(self):
+        with patch("anthropic.Anthropic") as MockAnthropic, patch("time.sleep") as sleep:
+            client = MagicMock()
+            client.messages.create.side_effect = [
+                Exception("400: temperature is not supported for this model"),
+                self._ok_response(),
+            ]
+            MockAnthropic.return_value = client
+            judge = AnthropicJudge(api_key="fake-key", max_retries=1)
+            # max_retries=1: success proves the temperature retry is not a real attempt.
+            assert judge.score(_make_trace(), "answer_quality") == 0.6
+            first, second = client.messages.create.call_args_list
+            assert first.kwargs["extra_body"] == {"temperature": 0.0}
+            assert second.kwargs["extra_body"] is None
+            sleep.assert_not_called()
+            # The decision is remembered for the next call.
+            client.messages.create.side_effect = None
+            client.messages.create.return_value = self._ok_response()
+            judge.score(_make_trace("t-2"), "answer_quality")
+            assert client.messages.create.call_args.kwargs["extra_body"] is None
+
+    def test_other_errors_still_consume_retries_and_keep_temperature(self):
+        with patch("anthropic.Anthropic") as MockAnthropic, patch("time.sleep"):
+            client = MagicMock()
+            client.messages.create.side_effect = Exception("503 overloaded")
+            MockAnthropic.return_value = client
+            judge = AnthropicJudge(api_key="fake-key", max_retries=2)
+            with pytest.raises(RuntimeError, match="exhausted retries"):
+                judge.score(_make_trace(), "answer_quality")
+            assert client.messages.create.call_count == 2
+            assert judge._send_temperature is True
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Ollama judge (mocked)
 # ─────────────────────────────────────────────────────────────────────────────
