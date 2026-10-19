@@ -33,6 +33,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Files written/read by the CLI and config (`settings.json`, attestations, exported traces) now use explicit UTF-8 with `\n` line endings instead of the platform default, so non-ASCII data round-trips identically on Windows. The canonical form itself (`vidimus.audit.canonical`) was already locale-independent and is unchanged: no canonical bytes change, previously signed attestations are unaffected. The Windows test failure was a test harness bug (locale encoding of the Node pipe); canonical bytes and SHA-256 are now pinned by golden vectors shared by the Python and Node suites.
 - `AnthropicJudge` no longer passes `temperature` as a typed argument (recent `anthropic` SDKs removed it); it is sent as raw request body and dropped automatically if the model rejects it. Typing of `OllamaJudge` payload and Fleiss' kappa arrays fixed so `mypy src/vidimus` passes.
 
+### Fixed (post-merge)
+- CI toolchain bounds: `constraints-dev.txt` caps mypy, ruff, anthropic, numpy and requests; CI installs with `-c constraints-dev.txt`.
+- Tests for the `AnthropicJudge` temperature fallback (sent via `extra_body`, dropped once if the model rejects it, not counted as a retry).
+
 ### Changed
 - Test count: **204** passing tests (`pytest`, measured 2026-10-19; the 0.1.0a2 entry below reports its own count at that release)
 - `verify()` without `trusted_keys` now returns the warning "issuer key not pinned: signature proves integrity, not identity".
