@@ -81,9 +81,9 @@ class TestEndToEnd:
 
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "att.json"
-            path.write_text(att.model_dump_json(indent=2))
+            path.write_text(att.model_dump_json(indent=2), encoding="utf-8", newline="\n")
 
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8"))
             loaded = Attestation.model_validate(data)
 
             ok, issues, _warnings = verify(loaded)

@@ -7,11 +7,13 @@ test vectors. Specifically:
   leaf_hash = SHA-256(0x00 || data)
   node_hash = SHA-256(0x01 || left || right)
 
-Odd levels duplicate the last node (rather than promoting it untouched).
-This is a deliberate choice over the alternative "promote unpaired" rule;
-it makes inclusion proofs uniform in length within a tree but slightly
-inflates the tree. For our use case (auditable agent traces), uniformity
-of proofs is more valuable than tree compactness.
+For n > 1 leaves the tree splits at k, the largest power of two strictly
+less than n (RFC 6962 §2.1):
+
+  MTH(D[n]) = node_hash(MTH(D[0:k]), MTH(D[k:n]))
+
+No node is ever duplicated, so ``[a, b, c]`` and ``[a, b, c, c]`` have
+different roots. (Duplicating the last node makes those two collide.)
 
 Reference: RFC 6962 §2 (https://www.rfc-editor.org/rfc/rfc6962#section-2)
 """
@@ -46,12 +48,31 @@ def _hash_node(left: bytes, right: bytes) -> bytes:
     return hashlib.sha256(b"\x01" + left + right).digest()
 
 
+def _split(n: int) -> int:
+    """Largest power of two strictly less than ``n`` (``n`` >= 2)."""
+    return 1 << ((n - 1).bit_length() - 1)
+
+
+def _path_length(index: int, size: int) -> int:
+    """Number of hashes in the RFC 6962 audit path of leaf ``index`` in a tree of ``size``."""
+    length = 0
+    while size > 1:
+        k = _split(size)
+        if index < k:
+            size = k
+        else:
+            index -= k
+            size -= k
+        length += 1
+    return length
+
+
 class MerkleTree:
     """A SHA-256 Merkle tree built from a list of byte-string leaves.
 
-    The tree is built eagerly. For incremental construction (e.g. streaming
-    trace ingestion), a future version will expose ``append`` and a
-    Sparse Merkle Tree variant.
+    The tree follows RFC 6962 §2.1. It is built eagerly. For incremental
+    construction (e.g. streaming trace ingestion), a future version will
+    expose ``append`` and a Sparse Merkle Tree variant.
     """
 
     def __init__(self, leaves: list[bytes]):
@@ -69,24 +90,25 @@ class MerkleTree:
             raise ValueError("MerkleTree requires at least one leaf")
         self._leaves = list(leaves)
         self._leaf_hashes = [_hash_leaf(d) for d in leaves]
-        self._levels: list[list[bytes]] = [self._leaf_hashes]
-        self._build()
+        self._cache: dict[tuple[int, int], bytes] = {}
+        self._root = self._mth(0, len(self._leaf_hashes))
 
-    def _build(self) -> None:
-        current = self._leaf_hashes
-        while len(current) > 1:
-            nxt: list[bytes] = []
-            for i in range(0, len(current), 2):
-                left = current[i]
-                right = current[i + 1] if i + 1 < len(current) else current[i]
-                nxt.append(_hash_node(left, right))
-            self._levels.append(nxt)
-            current = nxt
+    def _mth(self, lo: int, hi: int) -> bytes:
+        """Merkle tree hash of leaf hashes ``[lo, hi)``."""
+        if hi - lo == 1:
+            return self._leaf_hashes[lo]
+        key = (lo, hi)
+        cached = self._cache.get(key)
+        if cached is None:
+            mid = lo + _split(hi - lo)
+            cached = _hash_node(self._mth(lo, mid), self._mth(mid, hi))
+            self._cache[key] = cached
+        return cached
 
     @property
     def root(self) -> bytes:
         """The Merkle root as raw bytes."""
-        return self._levels[-1][0]
+        return self._root
 
     @property
     def root_hex(self) -> str:
@@ -101,6 +123,9 @@ class MerkleTree:
     def proof(self, index: int) -> InclusionProof:
         """Generate an inclusion proof for the leaf at ``index``.
 
+        The path is the RFC 6962 audit path, ordered from the leaf's
+        sibling up to the child of the root.
+
         Args:
             index: Zero-based leaf index.
 
@@ -113,16 +138,18 @@ class MerkleTree:
         if not 0 <= index < self.size:
             raise IndexError(f"Leaf index {index} out of range [0, {self.size})")
 
+        # Walk down from the root collecting siblings, then reverse to bottom-up.
         path: list[bytes] = []
-        idx = index
-        for level in self._levels[:-1]:
-            sibling_idx = idx ^ 1  # flip last bit
-            if sibling_idx < len(level):
-                path.append(level[sibling_idx])
+        lo, hi, idx = 0, self.size, index
+        while hi - lo > 1:
+            mid = lo + _split(hi - lo)
+            if idx < mid:
+                path.append(self._mth(mid, hi))
+                hi = mid
             else:
-                # Duplicate the last node (our chosen convention).
-                path.append(level[idx])
-            idx //= 2
+                path.append(self._mth(lo, mid))
+                lo = mid
+        path.reverse()
 
         return InclusionProof(
             leaf_index=index,
@@ -132,8 +159,29 @@ class MerkleTree:
         )
 
 
+def legacy_merkle_root(leaves: list[bytes]) -> bytes:
+    """Root under the pre-0.1.0a3 rule (odd levels duplicate the last node).
+
+    Kept ONLY to verify attestations whose ``merkle_scheme`` is
+    ``legacy-duplicate``. It is ambiguous (``[a,b,c]`` and ``[a,b,c,c]``
+    collide) and must not be used to build new trees.
+    """
+    if not leaves:
+        raise ValueError("at least one leaf is required")
+    level = [_hash_leaf(d) for d in leaves]
+    while len(level) > 1:
+        level = [
+            _hash_node(level[i], level[i + 1] if i + 1 < len(level) else level[i])
+            for i in range(0, len(level), 2)
+        ]
+    return level[0]
+
+
 def verify_inclusion(proof: InclusionProof, root: bytes) -> bool:
-    """Verify an inclusion proof against an expected root.
+    """Verify an inclusion proof against an expected root (RFC 9162 §2.1.3.2).
+
+    Rejects proofs whose ``leaf_index`` is outside ``[0, tree_size)`` or whose
+    path length differs from the one required for that index and tree size.
 
     Args:
         proof: An InclusionProof produced by ``MerkleTree.proof()``.
@@ -142,16 +190,26 @@ def verify_inclusion(proof: InclusionProof, root: bytes) -> bool:
     Returns:
         True if the proof reconstructs the given root, False otherwise.
     """
+    if not 0 <= proof.leaf_index < proof.tree_size:
+        return False
+    if len(proof.path) != _path_length(proof.leaf_index, proof.tree_size):
+        return False
+
+    fn = proof.leaf_index
+    sn = proof.tree_size - 1
     computed = proof.leaf_hash
-    idx = proof.leaf_index
-
     for sibling in proof.path:
-        if idx % 2 == 0:
-            # We are the left child.
-            computed = _hash_node(computed, sibling)
-        else:
-            # We are the right child.
+        if sn == 0:
+            return False
+        if fn & 1 or fn == sn:
             computed = _hash_node(sibling, computed)
-        idx //= 2
+            if not fn & 1:
+                while not fn & 1 and fn != 0:
+                    fn >>= 1
+                    sn >>= 1
+        else:
+            computed = _hash_node(computed, sibling)
+        fn >>= 1
+        sn >>= 1
 
-    return computed == root
+    return sn == 0 and computed == root

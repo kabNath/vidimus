@@ -109,8 +109,7 @@ def compute_anchor_hash(attestation: Attestation) -> bytes:
       anchor_hash = SHA-256(merkle_root || attestation_canonical_hash)
     """
     merkle_root_bytes = bytes.fromhex(attestation.merkle_root)
-    att_payload = attestation.model_dump(mode="json")
-    att_payload["signature"] = ""  # detached-signature pattern
+    att_payload = attestation.signing_dict()  # detached signature; legacy scheme omitted
     att_hash = hashlib.sha256(canonicalize(att_payload)).digest()
     return hashlib.sha256(merkle_root_bytes + att_hash).digest()
 

@@ -261,21 +261,27 @@ class AnthropicJudge(Judge):
         self._timeout = timeout
         self._max_retries = max_retries
         self._client = Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"))
+        self._send_temperature = True
 
     def score(self, trace: Trace, metric: str) -> float:
         inp, out = _format_trace_for_judge(trace)
         user_prompt = JUDGE_USER_TEMPLATE.format(metric=metric, input=inp, output=out)
 
         last_exc: Exception | None = None
-        for attempt in range(self._max_retries):
+        attempt = 0
+        while attempt < self._max_retries:
             try:
+                # Recent SDK releases no longer expose ``temperature`` as a typed
+                # parameter (newer models fix their sampling). We still want greedy
+                # decoding wherever the model accepts it, so it travels in the raw
+                # request body and is dropped if the API rejects it.
                 resp = self._client.messages.create(
                     model=self._model,
                     max_tokens=200,
-                    temperature=0.0,
                     system=JUDGE_SYSTEM_PROMPT,
                     messages=[{"role": "user", "content": user_prompt}],
                     timeout=self._timeout,
+                    extra_body={"temperature": 0.0} if self._send_temperature else None,
                 )
                 raw = ""
                 for block in resp.content:
@@ -284,6 +290,11 @@ class AnthropicJudge(Judge):
                 return _parse_judge_response(raw, metric)
             except Exception as exc:
                 last_exc = exc
+                if self._send_temperature and "temperature" in str(exc).lower():
+                    # The model rejects an explicit temperature: retry without it.
+                    self._send_temperature = False
+                    logger.warning("AnthropicJudge: model rejects 'temperature'; retrying without")
+                    continue  # not a real attempt: does not count against max_retries
                 wait = 2**attempt
                 logger.warning(
                     "AnthropicJudge attempt %d/%d failed: %s; retrying in %ds",
@@ -293,6 +304,7 @@ class AnthropicJudge(Judge):
                     wait,
                 )
                 time.sleep(wait)
+                attempt += 1
 
         raise RuntimeError(f"AnthropicJudge exhausted retries: {last_exc}")
 
@@ -300,6 +312,10 @@ class AnthropicJudge(Judge):
 # ─────────────────────────────────────────────────────────────────────────────
 # Ollama judge (local OSS models, no API key needed)
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+# A JSON value as the ``requests`` type stubs expect it for ``post(json=...)``.
+_JsonValue = str | int | float | bool | None | list["_JsonValue"] | dict[str, "_JsonValue"]
 
 
 class OllamaJudge(Judge):
@@ -336,7 +352,7 @@ class OllamaJudge(Judge):
         inp, out = _format_trace_for_judge(trace)
         user_prompt = JUDGE_USER_TEMPLATE.format(metric=metric, input=inp, output=out)
 
-        payload = {
+        payload: dict[str, _JsonValue] = {
             "model": self._model,
             "messages": [
                 {"role": "system", "content": JUDGE_SYSTEM_PROMPT},

@@ -3,23 +3,24 @@
 This module is the user-visible glue layer over the cryptographic and
 statistical primitives. ``attest()`` produces a signed Attestation;
 ``verify()`` checks one offline given only the file and the issuer's
-public key (which is also embedded in the attestation, so verification
-is fully self-contained for casual checks; a separate ``keys.txt`` lookup
-is recommended for higher-assurance verification).
+public key. The key is also embedded in the attestation, so without
+``trusted_keys`` a successful check proves integrity only, not identity;
+pin the issuer with ``trusted_keys`` for identity assurance.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from vidimus.audit.canonical import canonicalize
 from vidimus.audit.judges import Judge, build_judges
 from vidimus.audit.keys import KeyPair, public_key_from_hex
-from vidimus.audit.merkle import MerkleTree
+from vidimus.audit.merkle import MerkleTree, legacy_merkle_root
 from vidimus.audit.schemas import (
     Attestation,
     CalibratedMetric,
+    Trace,
 )
 from vidimus.audit.signing import sign_hex, verify_hex
 from vidimus.audit.uncertainty import (
@@ -28,6 +29,17 @@ from vidimus.audit.uncertainty import (
     fleiss_kappa,
 )
 from vidimus.config import get_config
+
+
+def leaf_bytes(trace: Trace) -> bytes:
+    """Canonical bytes of a trace as committed in the Merkle tree.
+
+    The single source of truth for leaf construction: ``attest``, ``prove``
+    and any verifier must build leaves with this function. ``MerkleTree``
+    applies the RFC 6962 leaf hash (``SHA-256(0x00 || data)``) itself, so
+    the data passed in must NOT be pre-hashed.
+    """
+    return canonicalize(trace.model_dump(mode="json"))
 
 
 def attest(
@@ -84,7 +96,7 @@ def attest(
         )
 
     # Step 2: build Merkle tree over canonical-JSON traces.
-    leaves = [canonicalize(t.model_dump(mode="json")) for t in traces]
+    leaves = [leaf_bytes(t) for t in traces]
     tree = MerkleTree(leaves)
 
     # Step 3: instantiate judges.
@@ -138,6 +150,7 @@ def attest(
         period_start=period_start,
         period_end=period_end,
         merkle_root=tree.root_hex,
+        merkle_scheme="rfc6962-v1",
         trace_count=tree.size,
         metrics=calibrated,
         issuer_pubkey_fingerprint=keypair.fingerprint,
@@ -154,14 +167,33 @@ def attest(
     return signed
 
 
-def verify(attestation: Attestation) -> tuple[bool, list[str], list[str]]:
+NOT_PINNED_WARNING = "issuer key not pinned: signature proves integrity, not identity"
+
+
+def verify(
+    attestation: Attestation,
+    trusted_keys: Sequence[str] | None = None,
+) -> tuple[bool, list[str], list[str]]:
     """Verify an attestation cryptographically and statistically.
 
     Checks performed:
       1. The embedded public key matches the embedded fingerprint.   (fatal)
       2. Ed25519 signature is valid over canonical JSON.              (fatal)
       3. Metric CIs are well-formed (low <= point <= high).           (fatal)
-      4. Inter-judge agreement >= 0.4 on LLM-judge metrics.           (warning)
+      4. Issuer is in ``trusted_keys``, when provided.                (fatal)
+      5. Inter-judge agreement >= 0.4 on LLM-judge metrics.           (warning)
+
+    The attestation embeds its own public key, so without ``trusted_keys``
+    a valid signature only proves *integrity* (the content was not altered
+    after signing), not *identity* (anyone can sign a self-consistent
+    report with their own key). Pass ``trusted_keys`` to pin the issuer.
+
+    Args:
+        attestation: The attestation to verify.
+        trusted_keys: Accepted issuers, as key fingerprints (SHA-256 of the
+            raw public key) or raw public keys, hex-encoded. If provided
+            (even if empty), the issuer must match one of them or
+            verification fails. If ``None``, a warning is returned.
 
     The distinction matters: a valid signature with low judge agreement
     means the attestation is *cryptographically authentic* but its metric
@@ -206,7 +238,26 @@ def verify(attestation: Attestation) -> tuple[bool, list[str], list[str]]:
                 f"CI [{m.ci_low}, {m.ci_high}]"
             )
 
-    # 4. Inter-judge agreement (non-fatal).
+    # 4. Issuer pinning.
+    if trusted_keys is None:
+        warnings.append(NOT_PINNED_WARNING)
+    else:
+        accepted = {k.strip().lower() for k in trusted_keys}
+        if derived_fp not in accepted and attestation.issuer_pubkey.lower() not in accepted:
+            issues.append(
+                f"issuer key {derived_fp} is not in trusted keys; "
+                f"signature may be valid but the signer is not a pinned issuer"
+            )
+
+    # 5. Merkle scheme (non-fatal): the legacy rule is ambiguous.
+    if attestation.merkle_scheme == "legacy-duplicate":
+        warnings.append(
+            "legacy Merkle scheme (legacy-duplicate): the root was built by duplicating "
+            "the last node, so different trace lists can share a root; re-issue the "
+            "attestation with vidimus >= 0.1.0a3"
+        )
+
+    # 6. Inter-judge agreement (non-fatal).
     for m in attestation.metrics:
         if m.judge_agreement is not None and m.judge_agreement < 0.4:
             warnings.append(
@@ -215,6 +266,40 @@ def verify(attestation: Attestation) -> tuple[bool, list[str], list[str]]:
             )
 
     return len(issues) == 0, issues, warnings
+
+
+def verify_traces(attestation: Attestation, traces: Iterable[Trace]) -> list[str]:
+    """Recompute the Merkle root over ``traces`` and compare it to the signed root.
+
+    ``traces`` must be exactly the traces of the attested window, in any
+    order (leaves are ordered by ``trace_id``, as ``attest`` does).
+
+    Returns:
+        A list of fatal issues; empty iff the recomputed root and the trace
+        count both match the attestation.
+    """
+    ordered = sorted(traces, key=lambda t: t.trace_id)
+    issues: list[str] = []
+    ids = [t.trace_id for t in ordered]
+    if len(set(ids)) != len(ids):
+        issues.append("duplicate trace_id in provided traces")
+    if len(ordered) != attestation.trace_count:
+        issues.append(
+            f"trace count mismatch: attestation signs {attestation.trace_count}, "
+            f"{len(ordered)} provided"
+        )
+    if not ordered:
+        return issues or ["no traces provided"]
+    leaves = [leaf_bytes(t) for t in ordered]
+    if attestation.merkle_scheme == "legacy-duplicate":
+        root = legacy_merkle_root(leaves).hex()
+    else:
+        root = MerkleTree(leaves).root_hex
+    if root != attestation.merkle_root:
+        issues.append(
+            f"Merkle root mismatch: recomputed {root}, attestation signs {attestation.merkle_root}"
+        )
+    return issues
 
 
 # --- Helpers ----------------------------------------------------------

@@ -152,8 +152,7 @@ def fleiss_kappa(ratings: list[list[int]]) -> float:
             n_ij[i, j] = cat_counts.get(c, 0)
 
     # Per-item agreement.
-    p_i = (n_ij**2).sum(axis=1) - n_raters
-    p_i = p_i / (n_raters * (n_raters - 1))
+    p_i = ((n_ij**2).sum(axis=1) - n_raters) / (n_raters * (n_raters - 1))
     p_bar = p_i.mean()
 
     # Per-category marginals.

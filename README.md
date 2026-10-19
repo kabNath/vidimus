@@ -6,7 +6,7 @@
 
 *Verifiable, auditable, cryptographically attested LLM and agent behavior for safety-critical, industrial, and research deployments where AI decisions must be reviewable after the fact.*
 
-[![Version](https://img.shields.io/badge/version-0.1.0a1-blue)](https://github.com/kabNath/vidimus/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0a3-blue)](https://github.com/kabNath/vidimus/releases)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 [![Build](https://github.com/kabNath/vidimus/actions/workflows/ci.yml/badge.svg)](https://github.com/kabNath/vidimus/actions)
@@ -26,7 +26,7 @@
 
 ## Why Vidimus exists
 
-Modern LLM observability tools tell you *what* your agent did. None of them prove it.
+Modern LLM observability tools tell you *what* your agent did. Some tools can already prove the *integrity* of records (hash chains, signed logs, transparency logs); what is rarely shipped with an evaluation report is a **metric with an explicit confidence interval and a measure of agreement between judges**, together with a signature a third party can check offline. That combination is what Vidimus adds.
 
 When a compliance officer asks "can you guarantee this evaluation report wasn't tampered with after the fact?", the answer is no. When a regulator asks "what's the confidence interval on that hallucination score?", the answer is silence. When a customer asks "can I verify this audit independently, without trusting your vendor?", the answer is "trust us."
 
@@ -61,15 +61,38 @@ Generate a signed attestation over the last 24 hours of traces:
 vidimus attest --since 24h --output report.json
 ```
 
-Anyone in the world can now verify it offline, without contacting your server:
+Export the traces the report covers, then verify offline, without contacting your server. Pin the issuer key (`--trusted-key`, or `--trusted-keys-file`) so the check proves *who* signed, not just that the file is intact:
 
 ```bash
-vidimus verify report.json
-# ✓ Merkle root matches 4,318 traces
-# ✓ Ed25519 signature valid (key: vidimus-ai/acme-prod)
-# ✓ Hallucination rate: 3.2% [95% CI: 2.7% – 3.8%, n=4,318, k=3 judges, agreement κ=0.82]
-# ✓ Optional on-chain anchor: BNB Chain block 47,892,134 (tx: 0xae9f...)
+vidimus export --against report.json -o traces.jsonl
+vidimus verify report.json --traces traces.jsonl --trusted-key c1410284d7b9c5b29ee0a22bd5553195d21de60070b9dd81ce02391beac137af
 ```
+
+```text
+✓ attestation report.json is valid
+⚠  warnings:
+    - metric 'hallucination': low inter-judge agreement (κ=0.03); interpret with extra caution
+  workspace    : acme-prod
+  period       : 2026-10-05 09:04:38.064727+00:00 → 2026-10-06 09:04:38.064727+00:00
+  trace count  : 40
+  Merkle root  : d02f29b042ea4f078c2d8cc7fdb157cd11e8428f2039729f09e889fedfe91f61
+  signed by    : c1410284d7b9c5b29ee0a22bd5553195d21de60070b9dd81ce02391beac137af
+  issuer pinned: yes
+  traces check : Merkle root matches 40 traces
+  on-chain     : none in report
+  hallucination            55.00% [CI 40.00% – 70.00%] n=40  κ=0.03
+```
+
+A single-file **browser verifier** ([`verifier/index.html`](verifier/index.html), no backend, no CDN) checks signature, key pinning and interval sanity of an attestation and lists what it did *not* check.
+
+This is the real output of a run on 40 traces scored by three stub judges (values, timestamps and keys differ on every run; the low κ is expected from stub judges). `verify` only reports what it checked:
+
+| Line | When it is checked |
+|---|---|
+| signature, key/fingerprint, metric intervals | always |
+| `issuer pinned: yes` | with `--trusted-key` / `--trusted-keys-file`; otherwise a warning says the signature proves integrity, not identity |
+| `traces check : Merkle root matches N traces` | with `--traces <export>`; otherwise `not checked (pass --traces)` |
+| `on-chain` | with `--check-anchor --rpc-url <url>` (needs `pip install vidimus[onchain]`) when the report has an anchor; otherwise `not checked (pass --check-anchor)`, or `none in report` |
 
 That's it. You now have a portable, cryptographically verifiable artifact of your agent's behavior.
 
@@ -98,6 +121,17 @@ The image is a multi-stage build (~150 MB final), runs as a non-root user, and s
 | [`examples/opik_integration.py`](examples/opik_integration.py) | Dual decoration (`@opik.track` + `@vidimus.audit`) — Vidimus on top of Comet Opik |
 | [`examples/langchain_integration.py`](examples/langchain_integration.py) | LangChain Q&A chain instrumented with Vidimus via OpenTelemetry |
 
+
+## Known limitations
+
+Read these before relying on an attestation.
+
+- **A signature proves integrity, not identity.** The issuer's public key is embedded in the report, so anyone can produce a self-consistent, validly signed report with their own key. **Pin the issuer key**: `vidimus verify report.json --trusted-key <fingerprint>` (or `--trusted-keys-file`). Without it, `verify` warns: *issuer key not pinned: signature proves integrity, not identity*.
+- **Garbage in, garbage out.** Vidimus proves that the traces and scores were not altered after signing. It does not prove that the traces are complete, that the agent was instrumented everywhere, or that the judges' scores are *right*.
+- **Judge bias is not captured by the interval.** The bootstrap interval measures sampling noise over the scored traces. If all LLM judges share the same blind spot or bias (same model family, same prompt), they will agree with each other and be wrong together; high inter-judge agreement (κ) is not evidence of correctness. The stub judges used in examples are heuristics, not evaluators.
+- **The Merkle root is only checked if you ask.** `vidimus verify` recomputes it only with `--traces <export>`, and checks the on-chain anchor only with `--check-anchor`; otherwise it prints `not checked`. An on-chain anchor adds a public timestamp, not extra cryptographic strength.
+- **Persistence uses DuckDB.** By default traces go to a DuckDB file per workspace (`~/.vidimus/workspaces/<workspace>/traces.duckdb`, or under `$VIDIMUS_HOME`), so `vidimus attest`, `prove`, `export` work from another terminal after your application exits. `duckdb` is a core dependency since 0.1.0a3 (the `[duckdb]` extra remains as an alias); if it is somehow missing the store falls back to memory with a warning and the CLI sees nothing. A DuckDB file can be opened by one process at a time: while your application is running, the CLI reports that the store is locked. `init(store="memory")` keeps the old ephemeral behaviour (tests).
+- **Alpha software.** APIs and the Merkle layout can change between releases.
 
 ## Architecture
 
@@ -156,7 +190,7 @@ See [ROADMAP.md](ROADMAP.md) for the detailed plan.
 
 ## Status
 
-Vidimus is in **alpha**. The Python SDK surface may change before v1.0.0. The cryptographic primitives (Ed25519 signatures, SHA-256 Merkle trees, RFC 8785 canonical JSON) are stable and will not break. Production use is at your own risk until v1.0.
+Vidimus is in **alpha**. The Python SDK surface may change before v1.0.0. The cryptographic primitives (Ed25519 signatures, RFC 6962 Merkle trees, RFC 8785 canonical JSON) are expected to stay stable, but 0.1.0a3 changed the Merkle layout (see [CHANGELOG](CHANGELOG.md)); do not assume compatibility between alpha releases. Production use is at your own risk until v1.0.
 
 We are actively looking for:
 
