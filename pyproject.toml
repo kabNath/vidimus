@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vidimus"
-version = "0.1.0a1"
+version = "0.1.0a3"
 description = "The trust layer for agentic AI — tamper-evident traces, calibrated uncertainty, cryptographic attestations"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,10 +32,11 @@ dependencies = [
     "click>=8.1",
     "rich>=13.0",
     "numpy>=1.24",
+    "duckdb>=0.10",  # default persistent trace store
 ]
 
 [project.optional-dependencies]
-duckdb = ["duckdb>=0.10"]
+duckdb = ["duckdb>=0.10"]  # kept for backwards compatibility: duckdb is now a core dependency
 otel = ["opentelemetry-sdk>=1.20", "fastapi>=0.110", "uvicorn>=0.29"]
 onchain = ["web3>=6.0"]
 openai = ["openai>=1.40"]

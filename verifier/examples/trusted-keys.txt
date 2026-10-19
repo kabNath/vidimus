@@ -1,0 +1,2 @@
+# Fingerprint of the demo issuer that signed valid.json and tampered.json
+336cfbfa53402d018b7281626d4e5b7c86c3598cdb7034a018ddca225d37fefa

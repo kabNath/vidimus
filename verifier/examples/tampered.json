@@ -1,0 +1,31 @@
+{
+  "version": "vidimus.attestation.v1",
+  "workspace": "demo",
+  "issued_at": "2026-10-06T09:32:26.158971Z",
+  "period_start": "2026-10-06T08:32:27.124787Z",
+  "period_end": "2026-10-06T09:32:27.124787Z",
+  "merkle_root": "7653dedec09cbddc177913bb89295d16eb1fffbabf282a254e4fe71c7513e34f",
+  "merkle_scheme": "rfc6962-v1",
+  "trace_count": 12,
+  "metrics": [
+    {
+      "name": "hallucination",
+      "point_estimate": 0.2917,
+      "ci_low": 0.16666666666666666,
+      "ci_high": 0.6666666666666666,
+      "n": 12,
+      "method": "llm_judge",
+      "judges": [
+        "stub:a",
+        "stub:b",
+        "stub:c"
+      ],
+      "judge_agreement": -0.11455108359133144,
+      "bootstrap_iterations": 1000
+    }
+  ],
+  "issuer_pubkey_fingerprint": "336cfbfa53402d018b7281626d4e5b7c86c3598cdb7034a018ddca225d37fefa",
+  "issuer_pubkey": "6032c13c70c3e948e877260ead086ccdc919ac815775ebbecc57096968e8dfd9",
+  "onchain_anchor": null,
+  "signature": "069afb462df2f9bb88a53bed672ad034f01232148f5c1c3be5937c476ff5e73fb585a47e84c5e908a7d35e0b49b6a86f2a54a3577775880012b1f49e217abd05"
+}
