@@ -31,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `vidimus prove` double-hashed leaves (`sha256(canonicalize(trace))` fed into a tree that hashes again), so it never reproduced the root signed by `attest` and always failed. Both now share `vidimus.audit.attest.leaf_bytes(trace)`.
 
 ### Changed
+- Test count: **204** passing tests (`pytest`, measured 2026-10-19; the 0.1.0a2 entry below reports its own count at that release)
 - `verify()` without `trusted_keys` now returns the warning "issuer key not pinned: signature proves integrity, not identity".
 
 ## [0.1.0a2] — 2026-05-17
