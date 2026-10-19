@@ -23,17 +23,21 @@ pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node is no
 
 
 def _node(*args: str, stdin: str | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    # Node always speaks UTF-8 on its pipes, whatever the locale. Decoding/encoding with the
+    # locale code page (cp1252 on Windows) would corrupt or reject non-ASCII values.
+    r = subprocess.run(
         ["node", str(VERIFIER / "test.mjs"), *args],
-        input=stdin,
+        input=None if stdin is None else stdin.encode("utf-8"),
         capture_output=True,
-        text=True,
         timeout=120,
+    )
+    return subprocess.CompletedProcess(
+        r.args, r.returncode, r.stdout.decode("utf-8"), r.stderr.decode("utf-8", "replace")
     )
 
 
 def _fp() -> str:
-    lines = (EXAMPLES / "trusted-keys.txt").read_text().splitlines()
+    lines = (EXAMPLES / "trusted-keys.txt").read_text(encoding="utf-8").splitlines()
     return next(x for x in lines if x and not x.startswith("#")).strip()
 
 
@@ -82,9 +86,20 @@ def test_canonical_form_matches_python_for_random_values() -> None:
         assert canonicalize(v).decode() == g, f"{v!r}: python={canonicalize(v).decode()!r} js={g!r}"
 
 
+def test_page_produces_the_pinned_golden_canonical_bytes() -> None:
+    from tests.golden_canonical import GOLDEN
+
+    values = [g[1] for g in GOLDEN]
+    r = _node("--canon", stdin=json.dumps(values, ensure_ascii=False))
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout)
+    for (name, _, expected, _digest), g in zip(GOLDEN, got, strict=True):
+        assert g.encode("utf-8") == expected, name
+
+
 @pytest.mark.parametrize("name", ["valid.json", "tampered.json", "wrong-key.json"])
 def test_examples_get_the_same_verdict_in_python_and_in_the_page(name: str) -> None:
-    att = Attestation.model_validate_json((EXAMPLES / name).read_text())
+    att = Attestation.model_validate_json((EXAMPLES / name).read_text(encoding="utf-8"))
     for pins in (None, [_fp()]):
         ok_py, _, warnings = verify(att, trusted_keys=pins)
         args = ["--verify", str(EXAMPLES / name)] + (["--pin", pins[0]] if pins else [])
@@ -104,9 +119,9 @@ def test_legacy_attestation_is_verified_by_the_page_too(tmp_path: Path) -> None:
     vidimus.init(workspace="sch-ws", judges=["stub:a", "stub:b"], home_dir=tmp_path, store="memory")
     raw, _, _ = _legacy_attestation(5)
     path = tmp_path / "legacy.json"
-    path.write_text(json.dumps(raw))
+    path.write_text(json.dumps(raw), encoding="utf-8", newline="\n")
     js = json.loads(_node("--verify", str(path)).stdout)
     assert js["ok"] and js["status"]["signature"] == "pass" and js["status"]["scheme"] == "warn"
     raw["trace_count"] += 1
-    path.write_text(json.dumps(raw))
+    path.write_text(json.dumps(raw), encoding="utf-8", newline="\n")
     assert json.loads(_node("--verify", str(path)).stdout)["status"]["signature"] == "fail"

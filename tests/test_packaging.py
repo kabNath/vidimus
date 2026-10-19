@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def _core_dependencies() -> list[str]:
-    text = (ROOT / "pyproject.toml").read_text()
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     block = re.search(r"^dependencies = \[(.*?)^\]", text, re.M | re.S)
     assert block
     return re.findall(r'"([^"]+)"', block.group(1))
@@ -20,4 +20,6 @@ def test_duckdb_is_a_core_dependency() -> None:
 
 
 def test_duckdb_extra_still_exists_for_backwards_compatibility() -> None:
-    assert re.search(r'^duckdb = \["duckdb', (ROOT / "pyproject.toml").read_text(), re.M)
+    assert re.search(
+        r'^duckdb = \["duckdb', (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.M
+    )

@@ -154,7 +154,9 @@ def save_settings(home_dir: Path, workspace: str, judges: list[str] | None = Non
     data: dict[str, Any] = {"workspace": workspace}
     if judges:
         data["judges"] = judges
-    settings_path(home_dir).write_text(json.dumps(data, indent=2) + "\n")
+    settings_path(home_dir).write_text(
+        json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
 
 
 def init_from_saved_settings() -> VidimusConfig:
@@ -162,6 +164,6 @@ def init_from_saved_settings() -> VidimusConfig:
     home = default_home_dir()
     saved: dict[str, Any] = {}
     with contextlib.suppress(OSError, ValueError):
-        saved = json.loads(settings_path(home).read_text())
+        saved = json.loads(settings_path(home).read_text(encoding="utf-8"))
     workspace = os.environ.get("VIDIMUS_WORKSPACE") or saved.get("workspace") or "default"
     return init(workspace=workspace, judges=saved.get("judges"), home_dir=home)

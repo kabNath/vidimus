@@ -29,6 +29,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 - `vidimus verify` printed "Merkle root matches N traces" and an on-chain anchor line without checking either. It now reports `not checked` unless `--traces` / `--check-anchor` ran, and exits non-zero on a mismatch.
 - `vidimus prove` double-hashed leaves (`sha256(canonicalize(trace))` fed into a tree that hashes again), so it never reproduced the root signed by `attest` and always failed. Both now share `vidimus.audit.attest.leaf_bytes(trace)`.
+- The CLI crashed with `UnicodeEncodeError` on terminals whose encoding is not UTF-8 (e.g. Windows cp1252). Glyphs (check mark, ellipsis, arrows, kappa...) now fall back to ASCII in that case; UTF-8 output is unchanged.
+- Files written/read by the CLI and config (`settings.json`, attestations, exported traces) now use explicit UTF-8 with `\n` line endings instead of the platform default, so non-ASCII data round-trips identically on Windows. The canonical form itself (`vidimus.audit.canonical`) was already locale-independent and is unchanged: no canonical bytes change, previously signed attestations are unaffected. The Windows test failure was a test harness bug (locale encoding of the Node pipe); canonical bytes and SHA-256 are now pinned by golden vectors shared by the Python and Node suites.
+- `AnthropicJudge` no longer passes `temperature` as a typed argument (recent `anthropic` SDKs removed it); it is sent as raw request body and dropped automatically if the model rejects it. Typing of `OllamaJudge` payload and Fleiss' kappa arrays fixed so `mypy src/vidimus` passes.
 
 ### Changed
 - Test count: **204** passing tests (`pytest`, measured 2026-10-19; the 0.1.0a2 entry below reports its own count at that release)

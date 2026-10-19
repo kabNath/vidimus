@@ -75,7 +75,7 @@ def test_attest_prove_export_verify_across_terminals(tmp_path: Path) -> None:
     report, traces = tmp_path / "r.json", tmp_path / "t.jsonl"
     r = _cli(home, "attest", "--since", "1h", "--output", str(report), "--seed", "3")  # terminal 2
     assert r.returncode == 0, r.stdout + r.stderr
-    att = json.loads(report.read_text())
+    att = json.loads(report.read_text(encoding="utf-8"))
     assert att["workspace"] == "acme" and att["trace_count"] == 7
 
     r = _cli(home, "export", "--against", str(report), "-o", str(traces))  # terminal 3
@@ -83,7 +83,7 @@ def test_attest_prove_export_verify_across_terminals(tmp_path: Path) -> None:
     r = _cli(home, "verify", str(report), "--traces", str(traces))  # terminal 4
     assert r.returncode == 0 and "Merkle root matches 7 traces" in r.stdout, r.stdout + r.stderr
 
-    first = json.loads(traces.read_text().splitlines()[0])["trace_id"]
+    first = json.loads(traces.read_text(encoding="utf-8").splitlines()[0])["trace_id"]
     r = _cli(home, "prove", first, "--against", str(report))
     assert r.returncode == 0, r.stdout + r.stderr
     assert "Inclusion proof" in r.stdout
@@ -97,7 +97,7 @@ def test_init_does_not_wipe_existing_traces_unless_reset(tmp_path: Path) -> None
     report = tmp_path / "r.json"
     r = _cli(home, "attest", "--since", "1h", "--output", str(report))
     assert r.returncode == 0, r.stdout + r.stderr
-    assert json.loads(report.read_text())["trace_count"] == 4
+    assert json.loads(report.read_text(encoding="utf-8"))["trace_count"] == 4
 
     r = _cli(home, "init", "--workspace", "acme", "--reset", "--yes")
     assert r.returncode == 0, r.stdout + r.stderr
@@ -111,4 +111,20 @@ def test_cli_uses_workspace_saved_by_init(tmp_path: Path) -> None:
     _write_traces(home, 2, workspace="acme-prod")
     report = tmp_path / "r.json"
     assert _cli(home, "attest", "--since", "1h", "--output", str(report)).returncode == 0
-    assert json.loads(report.read_text())["workspace"] == "acme-prod"
+    assert json.loads(report.read_text(encoding="utf-8"))["workspace"] == "acme-prod"
+
+
+@pytest.mark.parametrize("encoding", ["cp1252", "ascii", "utf-8"])
+def test_cli_prints_under_any_stdout_encoding(tmp_path: Path, encoding: str) -> None:
+    """A legacy console code page (cp1252 on Windows) must not crash the CLI's glyphs."""
+    env = {**_env(tmp_path), "PYTHONIOENCODING": encoding, "PYTHONUTF8": "0"}
+    r = subprocess.run(
+        [sys.executable, "-m", "vidimus.cli.main", "init", "--workspace", "acme"],
+        env=env,
+        capture_output=True,
+        timeout=120,
+    )
+    assert r.returncode == 0, r.stderr.decode(encoding, "replace")
+    out = r.stdout.decode(encoding)
+    assert "Initialized workspace" in out
+    assert ("✓" in out) == (encoding == "utf-8")

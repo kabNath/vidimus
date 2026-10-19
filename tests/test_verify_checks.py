@@ -36,7 +36,7 @@ def _setup(tmp_path: Path, n: int = 5, kp=None):  # type: ignore[no-untyped-def]
     end = datetime.now(timezone.utc) + timedelta(seconds=1)
     att = attest(["hallucination"], end - timedelta(hours=1), end, kp, seed=1)
     report = tmp_path / "report.json"
-    report.write_text(att.model_dump_json())
+    report.write_text(att.model_dump_json(), encoding="utf-8", newline="\n")
     return att, report, kp
 
 
@@ -71,18 +71,23 @@ class TestTracesCheck:
 
     def test_json_array_export_also_accepted(self, tmp_path: Path) -> None:
         _att, report, _ = _setup(tmp_path)
-        rows = [json.loads(line) for line in _export(tmp_path, report).read_text().splitlines()]
+        rows = [
+            json.loads(line)
+            for line in _export(tmp_path, report).read_text(encoding="utf-8").splitlines()
+        ]
         arr = tmp_path / "traces.json"
-        arr.write_text(json.dumps(rows[::-1]))  # order must not matter
+        arr.write_text(
+            json.dumps(rows[::-1]), encoding="utf-8", newline="\n"
+        )  # order must not matter
         r = _run(str(report), "--traces", str(arr))
         assert r.exit_code == 0, r.output
 
     def test_modified_trace_is_detected(self, tmp_path: Path) -> None:
         _, report, _ = _setup(tmp_path)
         traces = _export(tmp_path, report)
-        rows = [json.loads(line) for line in traces.read_text().splitlines()]
+        rows = [json.loads(line) for line in traces.read_text(encoding="utf-8").splitlines()]
         rows[2]["output"] = "tampered"
-        traces.write_text("\n".join(json.dumps(x) for x in rows))
+        traces.write_text("\n".join(json.dumps(x) for x in rows), encoding="utf-8", newline="\n")
         r = _run(str(report), "--traces", str(traces))
         assert r.exit_code == 1
         assert "Merkle root" in r.output and "matches" not in r.output.split("Merkle root")[0]
@@ -90,8 +95,8 @@ class TestTracesCheck:
     def test_missing_trace_is_detected(self, tmp_path: Path) -> None:
         _, report, _ = _setup(tmp_path)
         traces = _export(tmp_path, report)
-        lines = traces.read_text().splitlines()
-        traces.write_text("\n".join(lines[:-1]))
+        lines = traces.read_text(encoding="utf-8").splitlines()
+        traces.write_text("\n".join(lines[:-1]), encoding="utf-8", newline="\n")
         r = _run(str(report), "--traces", str(traces))
         assert r.exit_code == 1
         assert "trace count" in r.output
@@ -103,7 +108,7 @@ class TestTracesCheck:
         bad = bad.model_copy(
             update={"signature": sign_hex(kp.private_key, bad.to_signing_payload())}
         )
-        report.write_text(bad.model_dump_json())
+        report.write_text(bad.model_dump_json(), encoding="utf-8", newline="\n")
         traces = _export(tmp_path, report.with_name("report.json"))  # window still valid
         assert _run(str(report)).exit_code == 0  # signature alone is fine...
         r = _run(str(report), "--traces", str(traces))
@@ -124,7 +129,7 @@ class TestAnchorCheck:
         a = att.model_copy(update={"onchain_anchor": anchor, "signature": ""})
         a = a.model_copy(update={"signature": sign_hex(kp.private_key, a.to_signing_payload())})
         report = tmp_path / "anchored.json"
-        report.write_text(a.model_dump_json())
+        report.write_text(a.model_dump_json(), encoding="utf-8", newline="\n")
         return a, report
 
     def _patch(self, monkeypatch: pytest.MonkeyPatch, event):  # type: ignore[no-untyped-def]

@@ -70,7 +70,7 @@ class TestPinning:
 class TestCli:
     def _write(self, tmp_path: Path, kp) -> Path:  # type: ignore[no-untyped-def]
         p = tmp_path / "report.json"
-        p.write_text(_make(kp).model_dump_json())
+        p.write_text(_make(kp).model_dump_json(), encoding="utf-8", newline="\n")
         return p
 
     def test_cli_unpinned_prints_warning(self, tmp_path: Path) -> None:
@@ -91,7 +91,9 @@ class TestCli:
         kp = generate_keypair()
         report = self._write(tmp_path, kp)
         keys = tmp_path / "keys.txt"
-        keys.write_text(f"# pinned issuers\n\n{kp.fingerprint}  # prod\n")
+        keys.write_text(
+            f"# pinned issuers\n\n{kp.fingerprint}  # prod\n", encoding="utf-8", newline="\n"
+        )
         r = CliRunner().invoke(cli, ["verify", str(report), "--trusted-keys-file", str(keys)])
         assert r.exit_code == 0, r.output
         assert "not pinned" not in r.output

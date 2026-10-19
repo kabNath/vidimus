@@ -31,7 +31,7 @@ def _attested(n: int, tmp_path: Path):  # type: ignore[no-untyped-def]
     end = datetime.now(timezone.utc) + timedelta(seconds=1)
     att = attest(["hallucination"], end - timedelta(hours=1), end, generate_keypair(), seed=1)
     path = tmp_path / "att.json"
-    path.write_text(att.model_dump_json())
+    path.write_text(att.model_dump_json(), encoding="utf-8", newline="\n")
     return att, path
 
 

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 
+from tests.golden_canonical import GOLDEN
 from vidimus.audit.canonical import CanonicalizationError, canonicalize
 
 
@@ -108,3 +111,22 @@ class TestDeterminism:
         x1 = {"a": 1, "b": 2}
         x2 = {"b": 2, "a": 1}
         assert canonicalize(x1) == canonicalize(x2)
+
+
+class TestGoldenVectors:
+    """Pinned canonical bytes + SHA-256: must be identical on Linux, macOS and Windows."""
+
+    @pytest.mark.parametrize(
+        ("name", "value", "expected", "digest"), GOLDEN, ids=[g[0] for g in GOLDEN]
+    )
+    def test_bytes_and_hash_are_pinned(
+        self, name: str, value: object, expected: bytes, digest: str
+    ) -> None:
+        got = canonicalize(value)
+        assert got == expected
+        assert hashlib.sha256(got).hexdigest() == digest
+
+    def test_key_order_does_not_matter(self) -> None:
+        a = {"x": 1, "y": {"b": 2, "a": 3}}
+        b = {"y": {"a": 3, "b": 2}, "x": 1}
+        assert canonicalize(a) == canonicalize(b)

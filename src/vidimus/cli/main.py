@@ -19,7 +19,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import click
-from rich.console import Console
 from rich.table import Table
 
 from vidimus import __version__
@@ -28,6 +27,7 @@ from vidimus.audit.attest import leaf_bytes, verify_traces
 from vidimus.audit.attest import verify as do_verify
 from vidimus.audit.keys import generate_keypair, load_keypair, save_keypair
 from vidimus.audit.schemas import Attestation, Trace
+from vidimus.cli._glyphs import SafeConsole
 from vidimus.config import (
     default_home_dir,
     get_config,
@@ -37,14 +37,14 @@ from vidimus.config import (
 )
 from vidimus.config import init as init_config
 
-console = Console(soft_wrap=True)
+console = SafeConsole(soft_wrap=True)
 
 
 @click.group()
 @click.version_option(__version__, prog_name="vidimus")
 @click.pass_context
 def cli(ctx: click.Context) -> None:
-    """Vidimus — the trust layer for agentic AI."""
+    """Vidimus - the trust layer for agentic AI."""
     # A fresh terminal has no in-process config: pick up the workspace saved by
     # `vidimus init` (or $VIDIMUS_WORKSPACE) and open its persistent store.
     if ctx.invoked_subcommand not in ("init", "version") and not is_initialized():
@@ -214,7 +214,7 @@ def attest(
         console.print(f"[red]✗[/red] {e}")
         sys.exit(1)
 
-    output.write_text(attestation.model_dump_json(indent=2))
+    output.write_text(attestation.model_dump_json(indent=2), encoding="utf-8", newline="\n")
     console.print(f"[green]✓[/green] attestation written to [bold]{output}[/bold]")
     console.print(f"  workspace    : {attestation.workspace}")
     console.print(f"  trace count  : {attestation.trace_count}")
@@ -281,14 +281,14 @@ def verify(
     if check_anchor and not rpc_url:
         raise click.UsageError("--check-anchor requires --rpc-url (or VIDIMUS_RPC_URL)")
 
-    data = json.loads(file.read_text())
+    data = json.loads(file.read_text(encoding="utf-8"))
     attestation = Attestation.model_validate(data)
 
     pinned: list[str] | None = None
     if trusted_key or trusted_keys_file:
         pinned = list(trusted_key)
         if trusted_keys_file:
-            for line in trusted_keys_file.read_text().splitlines():
+            for line in trusted_keys_file.read_text(encoding="utf-8").splitlines():
                 line = line.split("#", 1)[0].strip()
                 if line:
                     pinned.append(line)
@@ -353,7 +353,7 @@ def verify(
 
 def _load_traces(path: Path) -> list[Trace]:
     """Read traces from a JSON array or JSONL file."""
-    text = path.read_text().strip()
+    text = path.read_text(encoding="utf-8").strip()
     if not text:
         return []
     if text.startswith("["):
@@ -414,11 +414,13 @@ def _check_anchor(attestation: Attestation, rpc_url: str) -> tuple[str | None, s
 )
 def export(attestation_path: Path, output: Path) -> None:
     """Export the traces covered by an attestation (input for `verify --traces`)."""
-    att = Attestation.model_validate_json(attestation_path.read_text())
+    att = Attestation.model_validate_json(attestation_path.read_text(encoding="utf-8"))
     traces = get_config().store.list_traces(
         workspace=att.workspace, start=att.period_start, end=att.period_end
     )
-    output.write_text("".join(t.model_dump_json() + "\n" for t in traces))
+    output.write_text(
+        "".join(t.model_dump_json() + "\n" for t in traces), encoding="utf-8", newline="\n"
+    )
     console.print(f"[green]✓[/green] {len(traces)} traces written to [bold]{output}[/bold]")
 
 
@@ -443,7 +445,7 @@ def prove(trace_id: str, attestation_path: str) -> None:
     from vidimus.config import get_config
 
     # Load attestation
-    att = Attestation.model_validate_json(Path(attestation_path).read_text())
+    att = Attestation.model_validate_json(Path(attestation_path).read_text(encoding="utf-8"))
     console.print(f"[bold]Attestation:[/bold] {attestation_path}")
     console.print(f"  workspace:    {att.workspace}")
     console.print(f"  trace count:  {att.trace_count}")
